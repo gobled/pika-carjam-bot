@@ -7,6 +7,8 @@ export type VehicleOrientation = "horizontal" | "vertical";
 
 export type VehicleRole = "target" | "car" | "truck";
 
+export type VehicleFacing = "left" | "right" | "up" | "down";
+
 export type VehicleState = {
   id: string;
   x: number;
@@ -14,6 +16,7 @@ export type VehicleState = {
   length: number;
   orientation: VehicleOrientation;
   role: VehicleRole;
+  facing: VehicleFacing;
 };
 
 export type ExitPosition =
@@ -37,7 +40,7 @@ export type BoardOccupancy = {
   byCoordinate: Map<string, string>;
 };
 
-export type MoveDirection = "forward" | "backward";
+export type MoveDirection = "forward";
 
 export type MoveInput = {
   vehicleId: string;
@@ -47,6 +50,7 @@ export type MoveInput = {
 export type InvalidMoveReason =
   | "vehicle_not_found"
   | "invalid_distance"
+  | "wrong_direction"
   | "path_blocked"
   | "out_of_bounds";
 
@@ -72,6 +76,7 @@ export type MoveRecord = {
   direction: MoveDirection;
   vehiclesBefore: VehicleState[];
   vehiclesAfter: VehicleState[];
+  escaped?: boolean;
 };
 
 export type HintRequest = {
