@@ -50,6 +50,14 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
     pushIntegerError(errors, `Vehicle ${vehicle.id} y`, vehicle.y, 0);
     pushIntegerError(errors, `Vehicle ${vehicle.id} length`, vehicle.length, 2);
 
+    const validFacing = vehicle.orientation === "horizontal"
+      ? vehicle.facing === "left" || vehicle.facing === "right"
+      : vehicle.facing === "up" || vehicle.facing === "down";
+
+    if (!validFacing) {
+      errors.push(`Vehicle ${vehicle.id} must face along its movement axis.`);
+    }
+
     if (!vehicle.colorKey && !vehicle.skinKey) {
       errors.push(`Vehicle ${vehicle.id} must define either colorKey or skinKey.`);
     }
@@ -87,8 +95,8 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
       errors.push(`hintMetadata.recommendedFirstMove references unknown vehicle ${vehicleId}.`);
     }
 
-    if (!Number.isInteger(distance) || distance === 0) {
-      errors.push("hintMetadata.recommendedFirstMove.distance must be a non-zero integer.");
+    if (!Number.isInteger(distance) || distance <= 0) {
+      errors.push("hintMetadata.recommendedFirstMove.distance must be a positive integer because cars only move forward.");
     }
   }
 
