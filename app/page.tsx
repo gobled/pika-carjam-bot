@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CarJam } from "@/app/components/CarJam";
+import { getLevelById, getLevelSummaries } from "@/app/lib/levels";
 import { getDisplayName } from "@/app/lib/telegram";
 import { useTelegramBootstrap } from "@/app/lib/useTelegramBootstrap";
 
@@ -15,9 +16,18 @@ type AppView =
   | "settings"
   | "leaderboard";
 
+type VictoryState = {
+  levelId: string;
+  moveCount: number;
+  starsEarned: number;
+  nextLevelId: string | null;
+};
+
 const STORAGE_KEYS = {
   soundEnabled: "pikaCarJamSoundEnabled",
 } as const;
+
+const LEVEL_SUMMARIES = getLevelSummaries();
 
 function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -59,6 +69,8 @@ export default function HomePage() {
   const { environment, session, webApp, error, isLoading } = useTelegramBootstrap();
   const [appView, setAppView] = useState<AppView>("loading");
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [selectedLevelId, setSelectedLevelId] = useState(LEVEL_SUMMARIES[0]?.levelId ?? "tutorial-01");
+  const [victoryState, setVictoryState] = useState<VictoryState | null>(null);
 
   useEffect(() => {
     const savedPreference = window.localStorage.getItem(STORAGE_KEYS.soundEnabled);
@@ -90,6 +102,7 @@ export default function HomePage() {
   const displayName = useMemo(() => getDisplayName(session), [session]);
   const username = session.user.username ? `@${session.user.username}` : null;
   const hasSessionWarning = environment === "telegram" && !session.hasTelegramUser;
+  const selectedLevel = getLevelById(selectedLevelId);
 
   const toggleSound = () => {
     setSoundEnabled((current) => {
@@ -98,6 +111,13 @@ export default function HomePage() {
       webApp?.HapticFeedback?.impactOccurred?.("soft");
       return next;
     });
+  };
+
+  const openLevel = (levelId: string) => {
+    setSelectedLevelId(levelId);
+    setVictoryState(null);
+    webApp?.HapticFeedback?.impactOccurred?.("medium");
+    setAppView("gameplay");
   };
 
   if (appView === "loading") {
@@ -118,12 +138,15 @@ export default function HomePage() {
   if (appView === "gameplay") {
     return (
       <CarJam
-        levelLabel="Level 1 · Traffic Warm-up"
+        levelId={selectedLevelId}
         session={session}
         soundEnabled={soundEnabled}
-        onBack={() => setAppView("home")}
+        onBack={() => setAppView("level-select")}
         onOpenSettings={() => setAppView("settings")}
-        onVictory={() => setAppView("victory-modal")}
+        onVictory={(payload) => {
+          setVictoryState(payload);
+          setAppView("victory-modal");
+        }}
       />
     );
   }
@@ -138,8 +161,8 @@ export default function HomePage() {
               <h1 className="mt-3 text-3xl font-bold text-white">{displayName}</h1>
               <p className="mt-2 text-sm text-slate-300">
                 {environment === "telegram"
-                  ? "Your Telegram mini app shell is ready for puzzle screens."
-                  : "Running in browser fallback mode for local development."}
+                  ? "Your Telegram mini app shell now opens into a real puzzle board."
+                  : "Running in browser fallback mode with the same playable puzzle flow."}
                 {username ? ` ${username}` : ""}
               </p>
             </div>
@@ -171,9 +194,9 @@ export default function HomePage() {
           <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-white">Top-level app states</p>
+                <p className="text-sm font-semibold text-white">Vertical slice ready</p>
                 <p className="mt-1 text-sm text-slate-300">
-                  Phase 1 wires every planned MVP screen into a stable shell so later gameplay work can focus on the puzzle engine.
+                  Pick a puzzle, slide vehicles, undo mistakes, restart fast, and clear the lane for the target car.
                 </p>
               </div>
               <button
@@ -191,16 +214,16 @@ export default function HomePage() {
                 onClick={() => setAppView("level-select")}
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
               >
-                <p className="font-semibold text-white">Level select</p>
-                <p className="mt-1 text-slate-400">Choose the first puzzle pack.</p>
+                <p className="font-semibold text-white">Level map</p>
+                <p className="mt-1 text-slate-400">Browse all 10 tutorial puzzles.</p>
               </button>
               <button
                 type="button"
-                onClick={() => setAppView("leaderboard")}
+                onClick={() => openLevel(selectedLevelId)}
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
               >
-                <p className="font-semibold text-white">Leaderboard</p>
-                <p className="mt-1 text-slate-400">Preview the upcoming social screen.</p>
+                <p className="font-semibold text-white">Continue puzzle</p>
+                <p className="mt-1 text-slate-400">Jump into {selectedLevel?.levelId.replace("tutorial-", "Level ") ?? "Level 1"}.</p>
               </button>
               <button
                 type="button"
@@ -208,32 +231,41 @@ export default function HomePage() {
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
               >
                 <p className="font-semibold text-white">Settings</p>
-                <p className="mt-1 text-slate-400">Check safe toggles and session info.</p>
+                <p className="mt-1 text-slate-400">Check safe toggles and Telegram session info.</p>
               </button>
               <button
                 type="button"
-                onClick={() => setAppView("daily-reward-modal")}
+                onClick={() => setAppView("leaderboard")}
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
               >
-                <p className="font-semibold text-white">Daily reward</p>
-                <p className="mt-1 text-slate-400">Open the modal state for rewards.</p>
+                <p className="font-semibold text-white">Leaderboard</p>
+                <p className="mt-1 text-slate-400">Keep the social shell visible for later phases.</p>
               </button>
             </div>
           </div>
 
           {appView === "home" && (
             <div className="mt-6 rounded-[1.75rem] border border-emerald-500/20 bg-emerald-500/10 p-5">
-              <p className="text-sm font-semibold text-emerald-100">Ready to start</p>
+              <p className="text-sm font-semibold text-emerald-100">Ready to play</p>
               <p className="mt-1 text-sm text-emerald-50/90">
-                The home screen is now driven by a stable session model instead of Telegram calls being embedded directly in the page UI.
+                The placeholder board is gone. You can now clear a real level with move validation, undo, restart, and a win flow.
               </p>
-              <button
-                type="button"
-                onClick={() => setAppView("level-select")}
-                className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-base font-semibold text-slate-950 transition hover:bg-emerald-300"
-              >
-                Start puzzle flow
-              </button>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => openLevel(LEVEL_SUMMARIES[0]?.levelId ?? selectedLevelId)}
+                  className="inline-flex w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-base font-semibold text-slate-950 transition hover:bg-emerald-300"
+                >
+                  Play level 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAppView("daily-reward-modal")}
+                  className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-semibold text-white transition hover:bg-white/10"
+                >
+                  Daily reward
+                </button>
+              </div>
             </div>
           )}
 
@@ -241,8 +273,8 @@ export default function HomePage() {
             <section className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">Level select</p>
-                  <p className="mt-1 text-sm text-slate-400">A simple launch pack placeholder keeps navigation stable while the puzzle engine lands.</p>
+                  <p className="text-sm font-semibold text-white">Level map</p>
+                  <p className="mt-1 text-sm text-slate-400">All launch-pack puzzles are available here for the vertical slice.</p>
                 </div>
                 <button
                   type="button"
@@ -253,20 +285,31 @@ export default function HomePage() {
                 </button>
               </div>
 
-              <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Tutorial pack</p>
-                <h2 className="mt-2 text-xl font-bold text-white">Traffic Warm-up</h2>
-                <p className="mt-2 text-sm text-slate-300">One starter puzzle slot is enough to validate the shell in Telegram and local browsers.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    webApp?.HapticFeedback?.impactOccurred?.("medium");
-                    setAppView("gameplay");
-                  }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-base font-semibold text-slate-950 transition hover:bg-emerald-300"
-                >
-                  Play level 1
-                </button>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {LEVEL_SUMMARIES.map((level, index) => (
+                  <button
+                    key={level.levelId}
+                    type="button"
+                    onClick={() => openLevel(level.levelId)}
+                    className={[
+                      "rounded-[1.5rem] border p-4 text-left transition",
+                      level.levelId === selectedLevelId
+                        ? "border-emerald-400/50 bg-emerald-500/10"
+                        : "border-white/10 bg-white/5 hover:border-emerald-400/30 hover:bg-white/10",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-white">Level {index + 1}</span>
+                      <span className="rounded-full border border-white/10 bg-slate-950/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                        {level.themeId.replace(/-/g, " ")}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-300">{level.vehicleCount} vehicles · {level.boardWidth}×{level.boardHeight} board</p>
+                    <p className="mt-3 text-sm text-slate-400">
+                      3⭐ in {level.starThresholds.threeStars} moves · 1⭐ in {level.starThresholds.oneStar}
+                    </p>
+                  </button>
+                ))}
               </div>
             </section>
           )}
@@ -296,6 +339,10 @@ export default function HomePage() {
                   <dd>{session.hasTelegramUser ? "Available" : "Fallback guest"}</dd>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <dt>Selected level</dt>
+                  <dd>{selectedLevel?.levelId ?? "Unknown"}</dd>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <dt>Init data</dt>
                   <dd>{session.rawInitData ? "Present" : "Unavailable"}</dd>
                 </div>
@@ -308,7 +355,7 @@ export default function HomePage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Leaderboard</p>
-                  <p className="mt-1 text-sm text-slate-400">This placeholder keeps the route-less MVP flow visible without mixing in non-game referral features.</p>
+                  <p className="mt-1 text-sm text-slate-400">Still a placeholder, but now framed around the real level loop instead of the old fake board.</p>
                 </div>
                 <button
                   type="button"
@@ -321,7 +368,7 @@ export default function HomePage() {
               <div className="mt-4 space-y-3 text-sm text-slate-300">
                 {[
                   ["Pika Pilot", "12 stars"],
-                  [displayName, "You · shell ready"],
+                  [displayName, victoryState ? `${victoryState.starsEarned} stars this run` : "You · ready to play"],
                   ["Turbo Turtle", "9 stars"],
                 ].map(([name, score], index) => (
                   <div key={name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
@@ -335,14 +382,14 @@ export default function HomePage() {
         </div>
       </AppShell>
 
-      {appView === "victory-modal" && (
+      {appView === "victory-modal" && victoryState && (
         <ModalCard
           title="Puzzle cleared!"
-          description="The victory modal state is wired up and ready for real move counts, stars, and next-level actions in later phases."
+          description={`You freed ${victoryState.levelId.replace("tutorial-", "Level ")} in ${victoryState.moveCount} moves.`}
         >
           <div className="space-y-3">
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
-              Placeholder result: 3 stars, 12 moves, 1 happy escape car.
+              Stars earned: {victoryState.starsEarned > 0 ? "⭐".repeat(victoryState.starsEarned) : "Keep practicing for stars!"}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -354,10 +401,17 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
-                onClick={() => setAppView("gameplay")}
+                onClick={() => {
+                  if (victoryState.nextLevelId) {
+                    openLevel(victoryState.nextLevelId);
+                    return;
+                  }
+
+                  setAppView("level-select");
+                }}
                 className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
               >
-                Next level
+                {victoryState.nextLevelId ? "Next level" : "More puzzles"}
               </button>
             </div>
           </div>
