@@ -134,12 +134,12 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const user = launchParams?.initData?.user;
+  const user = launchParams?.tgWebAppData?.user;
   const fullName = useMemo(() => {
     if (!user) {
       return "Guest";
     }
-    return user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName;
+    return user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name;
   }, [user]);
 
   const username = user?.username ? `@${user.username}` : null;
