@@ -1,21 +1,17 @@
 import assert from "node:assert/strict";
 import {
-  canVehicleEscape,
-  createColorMatchState,
   createGameState,
-  escapeVehicle,
   getHintSuggestion,
+  getLegalMoves,
   isWinningState,
   moveVehicle,
-  resetColorMatchState,
   resetGame,
-  resolveEscapedVehicle,
   undoMove,
   validateMove,
 } from "./app/lib/game";
 import {
   LAUNCH_LEVEL_PACK,
-  createColorMatchStateFromLevel,
+  createGameStateFromLevel,
   getLevelById,
   getLevelSummaries,
   getNextLevelMetadata,
@@ -28,13 +24,11 @@ import type { CreateGameStateInput } from "./app/lib/game";
 function createSampleGame(overrides: Partial<CreateGameStateInput> = {}) {
   return createGameState({
     board: { width: 6, height: 6 },
-    exit: { side: "right", row: 2 },
-    targetVehicleId: "target",
+    passengerQueue: ["sun", "mint", "sun"],
     vehicles: [
-      { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right" },
-      { id: "truck", x: 4, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down" },
-      { id: "car-a", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car", facing: "left" },
-      { id: "car-b", x: 5, y: 3, length: 2, orientation: "vertical", role: "car", facing: "up" },
+      { id: "sun-car", x: 0, y: 3, length: 2, orientation: "horizontal", colorKey: "sun", capacity: 2, occupancy: 0 },
+      { id: "mint-car", x: 4, y: 3, length: 2, orientation: "vertical", colorKey: "mint", capacity: 1, occupancy: 0 },
+      { id: "blocker", x: 2, y: 0, length: 3, orientation: "vertical", colorKey: "berry", capacity: 1, occupancy: 0 },
     ],
     ...overrides,
   });
@@ -50,53 +44,45 @@ function runTest(name: string, testFn: () => void) {
   }
 }
 
-runTest("allows valid forward moves and increments move history", () => {
+runTest("allows legal axis moves and applies boarding resolution", () => {
   const state = createSampleGame();
-  const result = moveVehicle(state, { vehicleId: "truck", distance: 1 });
+  const result = moveVehicle(state, { vehicleId: "sun-car", delta: 2 });
 
   assert.equal(result.ok, true);
   if (!result.ok) {
     return;
   }
 
-  assert.deepEqual(result.state.vehicles.find((vehicle) => vehicle.id === "truck"), {
-    id: "truck",
-    x: 4,
-    y: 1,
-    length: 3,
-    orientation: "vertical",
-    role: "truck",
-    facing: "down",
-  });
   assert.equal(result.state.moveCount, 1);
-  assert.equal(result.state.history.length, 1);
-  assert.equal(result.hasWon, false);
+  assert.equal(result.move.boardingEvents[0]?.type, "boarded");
+  assert.equal(result.state.passengerQueue.length, 0);
+  assert.equal(result.state.hasWon, true);
+  assert.equal(result.state.vehicles.some((vehicle) => vehicle.id === "sun-car"), false);
 });
 
-runTest("rejects blocked forward moves with a structured reason", () => {
+runTest("rejects blocked moves with structured details", () => {
   const state = createSampleGame();
-  const validation = validateMove(state, { vehicleId: "target", distance: 2 });
+  const validation = validateMove(state, { vehicleId: "sun-car", delta: 3 });
 
   assert.deepEqual(validation, {
     ok: false,
     reason: "path_blocked",
-    message: "Vehicle target is blocked by vehicle truck.",
-    blockedByVehicleId: "truck",
-    attemptedPosition: { x: 4, y: 2 },
+    message: "Vehicle sun-car is blocked by vehicle mint-car.",
+    blockedByVehicleId: "mint-car",
+    attemptedPosition: { x: 4, y: 3 },
   });
 });
 
-runTest("rejects backward moves", () => {
+runTest("rejects out-of-bounds movement", () => {
   const state = createSampleGame();
-  const result = moveVehicle(state, { vehicleId: "car-a", distance: -1 });
+  const result = moveVehicle(state, { vehicleId: "mint-car", delta: 3 });
 
   assert.equal(result.ok, false);
   if (result.ok) {
     return;
   }
 
-  assert.equal(result.reason, "wrong_direction");
-  assert.equal(result.message, "Vehicle car-a can only move forward.");
+  assert.equal(result.reason, "out_of_bounds");
 });
 
 runTest("prevents overlapping vehicles during game creation", () => {
@@ -104,45 +90,55 @@ runTest("prevents overlapping vehicles during game creation", () => {
     () =>
       createSampleGame({
         vehicles: [
-          { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right" },
-          { id: "overlap", x: 2, y: 2, length: 2, orientation: "vertical", role: "car", facing: "up" },
+          { id: "a", x: 0, y: 0, length: 2, orientation: "horizontal", colorKey: "sun", capacity: 1, occupancy: 0 },
+          { id: "b", x: 1, y: 0, length: 2, orientation: "vertical", colorKey: "mint", capacity: 1, occupancy: 0 },
         ],
       }),
-    /overlaps vehicle target/,
+    /overlaps vehicle a/,
   );
 });
 
-runTest("lets the target escape through the exit when its lane is clear", () => {
-  const state = createSampleGame({
+runTest("removes full cars from the board and frees their cells", () => {
+  const state = createGameState({
+    board: { width: 6, height: 6 },
+    passengerQueue: ["sun"],
     vehicles: [
-      { id: "target", x: 3, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right" },
-      { id: "support", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car", facing: "left" },
+      { id: "sun-car", x: 0, y: 3, length: 2, orientation: "horizontal", colorKey: "sun", capacity: 1, occupancy: 0 },
+      { id: "blocker", x: 4, y: 3, length: 2, orientation: "vertical", colorKey: "mint", capacity: 1, occupancy: 0 },
     ],
   });
 
-  assert.ok(canVehicleEscape(state, "target"));
-
-  const result = escapeVehicle(state, "target");
+  const result = moveVehicle(state, { vehicleId: "sun-car", delta: 1 });
   assert.equal(result.ok, true);
   if (!result.ok) {
     return;
   }
 
-  assert.equal(result.hasWon, true);
-  assert.equal(isWinningState(result.state), true);
+  assert.equal(result.state.vehicles.some((vehicle) => vehicle.id === "sun-car"), false);
+  assert.equal(result.state.passengerQueue.length, 0);
   assert.equal(result.state.hasWon, true);
-  assert.equal(result.state.vehicles.some((vehicle) => vehicle.id === "target"), false);
+  assert.equal(isWinningState(result.state), true);
 });
 
-runTest("supports undo and reset behavior deterministically", () => {
-  const start = createSampleGame();
-  const firstMove = moveVehicle(start, { vehicleId: "truck", distance: 1 });
+runTest("supports deterministic undo and reset with queue restoration", () => {
+  const start = createGameState({
+    board: { width: 6, height: 6 },
+    passengerQueue: ["sun", "mint"],
+    vehicles: [
+      { id: "sun-car", x: 0, y: 3, length: 2, orientation: "horizontal", colorKey: "sun", capacity: 1, occupancy: 0 },
+      { id: "mint-car", x: 2, y: 4, length: 2, orientation: "horizontal", colorKey: "mint", capacity: 1, occupancy: 0 },
+      { id: "blocker", x: 0, y: 1, length: 2, orientation: "horizontal", colorKey: "berry", capacity: 1, occupancy: 0 },
+      { id: "blocker-2", x: 2, y: 2, length: 2, orientation: "horizontal", colorKey: "ocean", capacity: 1, occupancy: 0 },
+    ],
+  });
+
+  const firstMove = moveVehicle(start, { vehicleId: "sun-car", delta: 2 });
   assert.equal(firstMove.ok, true);
   if (!firstMove.ok) {
     return;
   }
 
-  const secondMove = moveVehicle(firstMove.state, { vehicleId: "target", distance: 1 });
+  const secondMove = moveVehicle(firstMove.state, { vehicleId: "blocker-2", delta: 2 });
   assert.equal(secondMove.ok, true);
   if (!secondMove.ok) {
     return;
@@ -155,85 +151,32 @@ runTest("supports undo and reset behavior deterministically", () => {
   }
 
   assert.equal(undoResult.state.moveCount, 1);
-  assert.deepEqual(undoResult.state.vehicles.find((vehicle) => vehicle.id === "target"), {
-    id: "target",
-    x: 1,
-    y: 2,
-    length: 2,
-    orientation: "horizontal",
-    role: "target",
-    facing: "right",
-  });
+  assert.deepEqual(undoResult.state.passengerQueue, ["sun", "mint"]);
 
   const resetState = resetGame(undoResult.state);
   assert.equal(resetState.moveCount, 0);
   assert.equal(resetState.history.length, 0);
+  assert.deepEqual(resetState.passengerQueue, start.initialPassengerQueue);
   assert.deepEqual(resetState.vehicles, start.initialVehicles);
 });
 
-runTest("tracks color matching, dock storage, and auto-release chains", () => {
-  const start = createColorMatchState({
-    passengerQueue: ["sun", "mint", "berry"],
-    dockSlots: 2,
-  });
-
-  const firstEscape = resolveEscapedVehicle(start, { vehicleId: "wrong-first", colorKey: "mint" });
-  assert.equal(firstEscape.outcome, "docked");
-  assert.equal(firstEscape.state.dockedVehicles.length, 1);
-  assert.deepEqual(firstEscape.state.passengerQueue, ["sun", "mint", "berry"]);
-
-  const secondEscape = resolveEscapedVehicle(firstEscape.state, { vehicleId: "correct-now", colorKey: "sun" });
-  assert.equal(secondEscape.outcome, "matched");
-  assert.equal(secondEscape.autoDispatchedFromDock.length, 1);
-  assert.deepEqual(secondEscape.state.passengerQueue, ["berry"]);
-  assert.deepEqual(secondEscape.state.dispatchedVehicleIds, ["correct-now", "wrong-first"]);
-
-  const finalEscape = resolveEscapedVehicle(secondEscape.state, { vehicleId: "final-car", colorKey: "berry" });
-  assert.equal(finalEscape.state.isComplete, true);
-  assert.equal(finalEscape.state.dockedVehicles.length, 0);
+runTest("enumerates legal moves along both directions of each car axis", () => {
+  const state = createSampleGame();
+  const moves = getLegalMoves(state);
+  assert.ok(moves.some((move) => move.vehicleId === "sun-car" && move.delta === 1));
+  assert.ok(moves.some((move) => move.vehicleId === "mint-car" && move.delta === -3));
+  assert.ok(!moves.some((move) => move.vehicleId === "blocker" && move.delta === -1));
 });
 
-runTest("fails when a wrong-color escape overflows the dock", () => {
-  const start = createColorMatchState({
-    passengerQueue: ["sun", "mint"],
-    dockSlots: 1,
-  });
-
-  const oneWrong = resolveEscapedVehicle(start, { vehicleId: "wrong-a", colorKey: "mint" });
-  const overflow = resolveEscapedVehicle(oneWrong.state, { vehicleId: "wrong-b", colorKey: "mint" });
-
-  assert.equal(overflow.outcome, "failed");
-  assert.equal(overflow.state.isFailed, true);
-  assert.equal(overflow.state.isComplete, false);
-});
-
-runTest("resets color match state back to the original queue", () => {
-  const start = createColorMatchState({
-    passengerQueue: ["sun", "mint"],
-    dockSlots: 2,
-  });
-  const progressed = resolveEscapedVehicle(start, { vehicleId: "sun-car", colorKey: "sun" }).state;
-  const reset = resetColorMatchState(progressed);
-
-  assert.deepEqual(reset.passengerQueue, ["sun", "mint"]);
-  assert.equal(reset.dockedVehicles.length, 0);
-  assert.equal(reset.dispatchedVehicleIds.length, 0);
-});
-
-runTest("exposes a hint provider placeholder interface", () => {
+runTest("finds a bfs-based hint on live board states", () => {
   const state = createSampleGame({
-    hintProvider: () => ({
-      vehicleId: "target",
-      distance: 1,
-      explanation: "Slide the target car toward the exit.",
-    }),
+    hintProvider: undefined,
   });
 
-  assert.deepEqual(getHintSuggestion(state), {
-    vehicleId: "target",
-    distance: 1,
-    explanation: "Slide the target car toward the exit.",
-  });
+  const hint = getHintSuggestion(state);
+  assert.ok(hint);
+  assert.equal(hint?.vehicleId, "sun-car");
+  assert.ok((hint?.delta ?? 0) > 0);
 });
 
 console.log("All deterministic puzzle engine checks passed.");
@@ -247,19 +190,19 @@ runTest("validates every launch level schema", () => {
   }
 });
 
-runTest("solves each launch level with the color queue rules enabled", () => {
+runTest("solves each handcrafted launch level", () => {
   for (const level of LAUNCH_LEVEL_PACK.levels) {
     const solution = solveLevel(level);
     assert.ok(solution, `Expected ${level.levelId} to be solvable.`);
-    assert.ok((solution?.minimumMoves ?? 0) >= level.vehicles.length);
+    assert.ok((solution?.minimumMoves ?? 0) >= 1);
   }
 });
 
-runTest("provides level lookup, progression, and queue helpers", () => {
+runTest("provides level lookup, progression, and state helpers", () => {
   const level = getLevelById("tutorial-04");
   assert.ok(level);
   assert.equal(level?.levelId, "tutorial-04");
-  assert.deepEqual(level?.passengerQueue, ["mint", "ocean", "gold", "sun", "berry"]);
+  assert.deepEqual(level?.passengerQueue, ["berry", "mint", "berry", "gold"]);
 
   const summaries = getLevelSummaries();
   assert.equal(summaries.length, 10);
@@ -267,16 +210,15 @@ runTest("provides level lookup, progression, and queue helpers", () => {
     levelId: "tutorial-01",
     boardWidth: 6,
     boardHeight: 6,
-    themeId: "sunny-lot",
-    dockSlots: 2,
+    themeId: "sunrise-lot",
     starThresholds: { threeStars: 1, twoStars: 2, oneStar: 3 },
     vehicleCount: 3,
-    passengerCount: 3,
+    passengerCount: 2,
   });
 
-  const colorState = createColorMatchStateFromLevel("tutorial-09");
-  assert.equal(colorState.dockSlots, 3);
-  assert.equal(colorState.passengerQueue.length, 7);
+  const gameState = createGameStateFromLevel("tutorial-09");
+  assert.equal(gameState.passengerQueue.length, 8);
+  assert.equal(gameState.vehicles.length, 9);
 
   assert.deepEqual(getNextLevelMetadata("tutorial-10"), {
     currentLevelId: "tutorial-10",

@@ -1,15 +1,7 @@
-import type { ExitPosition, VehicleFacing, VehicleRole, VehicleState, VehicleOrientation } from "../game";
+import type { HintSuggestion, VehicleOrientation, VehicleState } from "../game";
 
-export type LevelVehicleDefinition = {
-  id: string;
-  x: number;
-  y: number;
-  length: number;
-  orientation: VehicleOrientation;
-  role: VehicleRole;
-  facing: VehicleFacing;
-  colorKey?: string;
-  skinKey?: string;
+export type LevelVehicleDefinition = Omit<VehicleState, "occupancy"> & {
+  occupancy?: number;
 };
 
 export type LevelStarThresholds = {
@@ -20,10 +12,9 @@ export type LevelStarThresholds = {
 
 export type LevelHintMetadata = {
   summary: string;
-  focusVehicleIds: string[];
   recommendedFirstMove?: {
     vehicleId: string;
-    distance: number;
+    delta: number;
   };
 };
 
@@ -31,10 +22,7 @@ export type LevelDefinition = {
   levelId: string;
   boardWidth: number;
   boardHeight: number;
-  exit: ExitPosition;
-  targetVehicleId: string;
   passengerQueue: string[];
-  dockSlots: number;
   vehicles: LevelVehicleDefinition[];
   starThresholds: LevelStarThresholds;
   themeId: string;
@@ -48,7 +36,7 @@ export type LaunchLevelPack = {
   levels: LevelDefinition[];
 };
 
-export type LevelSummary = Pick<LevelDefinition, "levelId" | "themeId" | "starThresholds" | "dockSlots"> & {
+export type LevelSummary = Pick<LevelDefinition, "levelId" | "themeId" | "starThresholds"> & {
   boardWidth: number;
   boardHeight: number;
   vehicleCount: number;
@@ -80,18 +68,15 @@ export type SolvedLevelResult = {
   minimumMoves: number;
   moves: Array<{
     vehicleId: string;
-    distance: number;
+    delta: number;
   }>;
 };
 
 export function toGameVehicleState(vehicle: LevelVehicleDefinition): VehicleState {
   return {
-    id: vehicle.id,
-    x: vehicle.x,
-    y: vehicle.y,
-    length: vehicle.length,
-    orientation: vehicle.orientation,
-    role: vehicle.role,
-    facing: vehicle.facing,
+    ...vehicle,
+    occupancy: vehicle.occupancy ?? 0,
   };
 }
+
+export type LevelPresetTheme = "sunrise-lot" | "aquarium-lot" | "arcade-lot" | "festival-lot";
