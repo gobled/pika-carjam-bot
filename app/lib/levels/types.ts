@@ -33,8 +33,6 @@ export type LevelDefinition = {
   boardHeight: number;
   exit: ExitPosition;
   targetVehicleId: string;
-  passengerQueue: string[];
-  dockSlots: number;
   vehicles: LevelVehicleDefinition[];
   starThresholds: LevelStarThresholds;
   themeId: string;
@@ -48,11 +46,10 @@ export type LaunchLevelPack = {
   levels: LevelDefinition[];
 };
 
-export type LevelSummary = Pick<LevelDefinition, "levelId" | "themeId" | "starThresholds" | "dockSlots"> & {
+export type LevelSummary = Pick<LevelDefinition, "levelId" | "themeId" | "starThresholds"> & {
   boardWidth: number;
   boardHeight: number;
   vehicleCount: number;
-  passengerCount: number;
 };
 
 export type NextLevelMetadata = {

@@ -11,8 +11,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["mint", "sun", "berry"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 0, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "wagon-a", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car", facing: "left", colorKey: "mint" },
@@ -32,8 +30,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["mint", "ocean", "sun", "berry"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "blocker", x: 4, y: 1, length: 2, orientation: "vertical", role: "car", facing: "up", colorKey: "ocean" },
@@ -54,8 +50,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["berry", "mint", "sun", "ocean", "gold"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "blocker-a", x: 3, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down", colorKey: "ocean" },
@@ -77,8 +71,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["mint", "ocean", "gold", "sun", "berry"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 0, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "blocker-a", x: 2, y: 1, length: 2, orientation: "vertical", role: "car", facing: "up", colorKey: "ocean" },
@@ -100,8 +92,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["berry", "sun", "mint", "ocean", "gold"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "blocker-a", x: 3, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down", colorKey: "ocean" },
@@ -123,8 +113,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["mint", "berry", "sun", "gold", "ocean", "plum"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 0, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "column-a", x: 2, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down", colorKey: "ocean" },
@@ -147,8 +135,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["plum", "sun", "ocean", "mint", "berry", "gold"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "column-a", x: 3, y: 1, length: 2, orientation: "vertical", role: "car", facing: "up", colorKey: "ocean" },
@@ -171,8 +157,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["gold", "mint", "sun", "berry", "ocean", "plum"],
-      dockSlots: 2,
       vehicles: [
         { id: "target", x: 0, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "column-a", x: 2, y: 1, length: 2, orientation: "vertical", role: "car", facing: "up", colorKey: "ocean" },
@@ -195,8 +179,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["berry", "coral", "sun", "mint", "gold", "ocean", "plum"],
-      dockSlots: 3,
       vehicles: [
         { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "column-a", x: 3, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down", colorKey: "ocean" },
@@ -220,8 +202,6 @@ export const LAUNCH_LEVEL_PACK: LaunchLevelPack = {
       boardHeight: 6,
       exit: { side: "right", row: 2 },
       targetVehicleId: "target",
-      passengerQueue: ["mint", "coral", "sun", "berry", "gold", "ocean", "plum"],
-      dockSlots: 3,
       vehicles: [
         { id: "target", x: 0, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right", colorKey: "sun" },
         { id: "column-a", x: 2, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down", colorKey: "ocean" },

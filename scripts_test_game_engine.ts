@@ -1,21 +1,17 @@
 import assert from "node:assert/strict";
 import {
   canVehicleEscape,
-  createColorMatchState,
   createGameState,
   escapeVehicle,
   getHintSuggestion,
   isWinningState,
   moveVehicle,
-  resetColorMatchState,
   resetGame,
-  resolveEscapedVehicle,
   undoMove,
   validateMove,
 } from "./app/lib/game";
 import {
   LAUNCH_LEVEL_PACK,
-  createColorMatchStateFromLevel,
   getLevelById,
   getLevelSummaries,
   getNextLevelMetadata,
@@ -171,55 +167,6 @@ runTest("supports undo and reset behavior deterministically", () => {
   assert.deepEqual(resetState.vehicles, start.initialVehicles);
 });
 
-runTest("tracks color matching, dock storage, and auto-release chains", () => {
-  const start = createColorMatchState({
-    passengerQueue: ["sun", "mint", "berry"],
-    dockSlots: 2,
-  });
-
-  const firstEscape = resolveEscapedVehicle(start, { vehicleId: "wrong-first", colorKey: "mint" });
-  assert.equal(firstEscape.outcome, "docked");
-  assert.equal(firstEscape.state.dockedVehicles.length, 1);
-  assert.deepEqual(firstEscape.state.passengerQueue, ["sun", "mint", "berry"]);
-
-  const secondEscape = resolveEscapedVehicle(firstEscape.state, { vehicleId: "correct-now", colorKey: "sun" });
-  assert.equal(secondEscape.outcome, "matched");
-  assert.equal(secondEscape.autoDispatchedFromDock.length, 1);
-  assert.deepEqual(secondEscape.state.passengerQueue, ["berry"]);
-  assert.deepEqual(secondEscape.state.dispatchedVehicleIds, ["correct-now", "wrong-first"]);
-
-  const finalEscape = resolveEscapedVehicle(secondEscape.state, { vehicleId: "final-car", colorKey: "berry" });
-  assert.equal(finalEscape.state.isComplete, true);
-  assert.equal(finalEscape.state.dockedVehicles.length, 0);
-});
-
-runTest("fails when a wrong-color escape overflows the dock", () => {
-  const start = createColorMatchState({
-    passengerQueue: ["sun", "mint"],
-    dockSlots: 1,
-  });
-
-  const oneWrong = resolveEscapedVehicle(start, { vehicleId: "wrong-a", colorKey: "mint" });
-  const overflow = resolveEscapedVehicle(oneWrong.state, { vehicleId: "wrong-b", colorKey: "mint" });
-
-  assert.equal(overflow.outcome, "failed");
-  assert.equal(overflow.state.isFailed, true);
-  assert.equal(overflow.state.isComplete, false);
-});
-
-runTest("resets color match state back to the original queue", () => {
-  const start = createColorMatchState({
-    passengerQueue: ["sun", "mint"],
-    dockSlots: 2,
-  });
-  const progressed = resolveEscapedVehicle(start, { vehicleId: "sun-car", colorKey: "sun" }).state;
-  const reset = resetColorMatchState(progressed);
-
-  assert.deepEqual(reset.passengerQueue, ["sun", "mint"]);
-  assert.equal(reset.dockedVehicles.length, 0);
-  assert.equal(reset.dispatchedVehicleIds.length, 0);
-});
-
 runTest("exposes a hint provider placeholder interface", () => {
   const state = createSampleGame({
     hintProvider: () => ({
@@ -247,19 +194,25 @@ runTest("validates every launch level schema", () => {
   }
 });
 
-runTest("solves each launch level with the color queue rules enabled", () => {
-  for (const level of LAUNCH_LEVEL_PACK.levels) {
+runTest("solves each launch level and keeps a gentle difficulty ramp", () => {
+  const moveCounts = LAUNCH_LEVEL_PACK.levels.map((level) => {
     const solution = solveLevel(level);
     assert.ok(solution, `Expected ${level.levelId} to be solvable.`);
-    assert.ok((solution?.minimumMoves ?? 0) >= level.vehicles.length);
+    return solution.minimumMoves;
+  });
+
+  for (let index = 1; index < moveCounts.length; index += 1) {
+    assert.ok(
+      moveCounts[index] >= moveCounts[index - 1],
+      `Expected ${LAUNCH_LEVEL_PACK.levels[index].levelId} to be at least as hard as the previous level.`,
+    );
   }
 });
 
-runTest("provides level lookup, progression, and queue helpers", () => {
+runTest("provides level lookup and progression helpers", () => {
   const level = getLevelById("tutorial-04");
   assert.ok(level);
   assert.equal(level?.levelId, "tutorial-04");
-  assert.deepEqual(level?.passengerQueue, ["mint", "ocean", "gold", "sun", "berry"]);
 
   const summaries = getLevelSummaries();
   assert.equal(summaries.length, 10);
@@ -268,15 +221,9 @@ runTest("provides level lookup, progression, and queue helpers", () => {
     boardWidth: 6,
     boardHeight: 6,
     themeId: "sunny-lot",
-    dockSlots: 2,
     starThresholds: { threeStars: 1, twoStars: 2, oneStar: 3 },
     vehicleCount: 3,
-    passengerCount: 3,
   });
-
-  const colorState = createColorMatchStateFromLevel("tutorial-09");
-  assert.equal(colorState.dockSlots, 3);
-  assert.equal(colorState.passengerQueue.length, 7);
 
   assert.deepEqual(getNextLevelMetadata("tutorial-10"), {
     currentLevelId: "tutorial-10",

@@ -196,7 +196,7 @@ export default function HomePage() {
               <div>
                 <p className="text-sm font-semibold text-white">Vertical slice ready</p>
                 <p className="mt-1 text-sm text-slate-300">
-                  Pick a puzzle, unblock vehicles, match the passenger queue by color, manage the dock, and restart fast when the lot jams up.
+                  Pick a puzzle, slide vehicles, undo mistakes, restart fast, and clear the lane for the target car.
                 </p>
               </div>
               <button
@@ -248,7 +248,7 @@ export default function HomePage() {
             <div className="mt-6 rounded-[1.75rem] border border-emerald-500/20 bg-emerald-500/10 p-5">
               <p className="text-sm font-semibold text-emerald-100">Ready to play</p>
               <p className="mt-1 text-sm text-emerald-50/90">
-                The placeholder board is gone. You can now play a queue-based parking jam with color matching, dock pressure, undo, restart, and a win flow.
+                The placeholder board is gone. You can now clear a real level with move validation, undo, restart, and a win flow.
               </p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <button

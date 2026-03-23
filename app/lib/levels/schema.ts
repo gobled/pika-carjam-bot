@@ -1,4 +1,4 @@
-import { createColorMatchState, createGameState, validateMove } from "../game";
+import { createGameState, validateMove } from "../game";
 import type { LevelDefinition, LevelValidationResult } from "./types";
 import { toGameVehicleState } from "./types";
 
@@ -35,7 +35,6 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
   }
 
   const vehicleIds = new Set<string>();
-  const vehicleColorCounts = new Map<string, number>();
   for (const vehicle of level.vehicles) {
     if (!isNonEmptyString(vehicle.id)) {
       errors.push("Each vehicle must have a non-empty id.");
@@ -62,33 +61,6 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
     if (!vehicle.colorKey && !vehicle.skinKey) {
       errors.push(`Vehicle ${vehicle.id} must define either colorKey or skinKey.`);
     }
-
-    if (vehicle.colorKey) {
-      vehicleColorCounts.set(vehicle.colorKey, (vehicleColorCounts.get(vehicle.colorKey) ?? 0) + 1);
-    }
-  }
-
-  pushIntegerError(errors, "dockSlots", level.dockSlots, 1);
-
-  if (!Array.isArray(level.passengerQueue) || level.passengerQueue.length !== level.vehicles.length) {
-    errors.push("passengerQueue must be an array with one passenger color per vehicle.");
-  }
-
-  const queueColorCounts = new Map<string, number>();
-  for (const colorKey of level.passengerQueue) {
-    if (!isNonEmptyString(colorKey)) {
-      errors.push("passengerQueue entries must be non-empty strings.");
-      continue;
-    }
-
-    queueColorCounts.set(colorKey, (queueColorCounts.get(colorKey) ?? 0) + 1);
-  }
-
-  const allColors = new Set([...vehicleColorCounts.keys(), ...queueColorCounts.keys()]);
-  for (const colorKey of allColors) {
-    if ((vehicleColorCounts.get(colorKey) ?? 0) !== (queueColorCounts.get(colorKey) ?? 0)) {
-      errors.push(`passengerQueue count for ${colorKey} must match the number of ${colorKey} vehicles.`);
-    }
   }
 
   const thresholds = level.starThresholds;
@@ -96,7 +68,10 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
   pushIntegerError(errors, "starThresholds.twoStars", thresholds.twoStars, 1);
   pushIntegerError(errors, "starThresholds.oneStar", thresholds.oneStar, 1);
 
-  if (thresholds.threeStars > thresholds.twoStars || thresholds.twoStars > thresholds.oneStar) {
+  if (
+    thresholds.threeStars > thresholds.twoStars ||
+    thresholds.twoStars > thresholds.oneStar
+  ) {
     errors.push("Star thresholds must increase from threeStars to oneStar.");
   }
 
@@ -144,11 +119,6 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
         exit: level.exit,
         targetVehicleId: level.targetVehicleId,
         vehicles: level.vehicles.map(toGameVehicleState),
-      });
-
-      createColorMatchState({
-        passengerQueue: level.passengerQueue,
-        dockSlots: level.dockSlots,
       });
 
       const recommendedMove = level.hintMetadata.recommendedFirstMove;
