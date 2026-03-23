@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   loadTelegramBootstrap,
   type TelegramBootstrapResult,
@@ -28,49 +28,30 @@ const INITIAL_BOOTSTRAP: TelegramBootstrapResult = {
   error: null,
 };
 
-const FALLBACK_ERROR = "We couldn't open the garage yet. Please try again.";
-
 export function useTelegramBootstrap() {
   const [bootstrap, setBootstrap] = useState<TelegramBootstrapResult>(INITIAL_BOOTSTRAP);
   const [isLoading, setIsLoading] = useState(true);
-  const [fatalError, setFatalError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
 
-    setIsLoading(true);
-    setFatalError(null);
-
-    const frame = window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       if (!isMounted) {
         return;
       }
 
-      try {
-        setBootstrap(loadTelegramBootstrap());
-      } catch (error) {
-        console.error("Telegram bootstrap failed unexpectedly.", error);
-        setFatalError(FALLBACK_ERROR);
-      } finally {
-        setIsLoading(false);
-      }
-    });
+      setBootstrap(loadTelegramBootstrap());
+      setIsLoading(false);
+    }, 120);
 
     return () => {
       isMounted = false;
-      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
     };
-  }, [attempt]);
-
-  const retry = useCallback(() => {
-    setAttempt((current) => current + 1);
   }, []);
 
   return {
     ...bootstrap,
     isLoading,
-    fatalError,
-    retry,
   };
 }
