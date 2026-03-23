@@ -1,88 +1,145 @@
-# Pika CarJam
+This is a [Next.js](https://nextjs.org) Telegram Mini App project for **Pika CarJam**, a kid-friendly parking puzzle game inspired by Car Jam / escape-style puzzle games.
 
-Pika CarJam is a Next.js Telegram Mini App that is being reshaped into a kid-friendly parking puzzle MVP. Phase 1 focuses on a stable app shell that can boot safely inside Telegram while also remaining usable in a normal desktop or mobile browser during local development.
+The current codebase keeps the existing Next.js + Telegram bot structure while the product direction shifts toward a colorful, touch-first puzzle game for ages 6-12. For the MVP, the app will use the current in-app API routes and Telegram integration instead of a separate backend service.
 
-## What Phase 1 delivers
+## Getting Started
 
-- A Telegram bootstrap helper that detects whether the app is running inside Telegram or a standard browser.
-- A typed session model that normalizes launch parameters into a single shape for the UI.
-- Progressive enhancement for Telegram-only APIs such as `expand`, fullscreen requests, closing confirmation, and orientation locking.
-- A lightweight loading state and shell-level fallback UI when Telegram session data is unavailable.
-- Top-level MVP shell states for home, level select, gameplay, victory modal, daily reward modal, settings, and leaderboard.
+### Prerequisites
 
-## Prerequisites
+- Node.js 18+ installed
+- A Telegram Bot Token (get it from [@BotFather](https://t.me/BotFather))
+- ngrok or similar tunneling service for local development
 
-- Node.js 18+
-- pnpm
-- A Telegram bot token if you want to run the bot/webhook flow
-- An HTTPS tunnel such as ngrok or Cloudflare Tunnel if you want to load the Mini App from Telegram during local development
+### Environment Setup
 
-## Environment variables
-
-Create `.env.local` in the repository root when you need Telegram bot features:
+1. Create a `.env.local` file in the root directory:
 
 ```env
 BOT_TOKEN=your_bot_token_here
-WEBAPP_URL=https://your-public-tunnel-url.example
-NEXT_PUBLIC_BOT_USERNAME=your_bot_username_without_the_at
+WEBAPP_URL=https://your-ngrok-url.ngrok.io
 ```
 
-### Variable notes
-
-- `BOT_TOKEN`: required for Telegram bot webhook and command handling.
-- `WEBAPP_URL`: public HTTPS URL used by the bot to open the Mini App.
-- `NEXT_PUBLIC_BOT_USERNAME`: optional for the Phase 1 shell itself, but required if you want any share/deep-link UI to generate Telegram bot links in future phases.
-
-## Local development
-
-### Browser-only shell preview
-
-If you only want to work on the app shell locally, you can run the frontend without Telegram:
+2. Install dependencies:
 
 ```bash
 pnpm install
-pnpm dev
 ```
 
-Then open `http://localhost:3000`. The app will detect that Telegram is unavailable and fall back to a local browser session model.
+### Developing Telegram Mini Apps Locally
 
-### Telegram Mini App preview
+Developing Telegram Mini Apps requires your app to be accessible via HTTPS. Here's how to set up your local development environment:
 
-To test the same app inside Telegram:
-
-1. Start the Next.js dev server.
-2. Expose it through HTTPS with a tunnel.
-3. Put the public tunnel URL into `WEBAPP_URL`.
-4. Start the bot.
-5. Open the bot inside Telegram and launch the Mini App.
-
-Example commands:
+#### Step 1: Start the Next.js Development Server
 
 ```bash
 pnpm dev
-ngrok http 3000
-pnpm bot:dev
 ```
 
-## Useful scripts
+Your app will be available at [http://localhost:3000](http://localhost:3000).
 
-- `pnpm dev` — start the Next.js dev server.
-- `pnpm build` — build the Next.js app.
-- `pnpm start` — run the production build.
-- `pnpm bot:dev` — run the Telegram bot in development mode.
-- `pnpm bot:build` — compile the bot TypeScript project.
-- `pnpm bot:start` — start the compiled bot.
+#### Step 2: Expose Your Local Server with ngrok
 
-## Current project structure
+Since Telegram requires HTTPS URLs for Mini Apps, you need to expose your local server:
 
-- `app/page.tsx` — top-level shell states and screen transitions.
-- `app/components/CarJam.tsx` — isolated gameplay shell placeholder.
-- `app/lib/telegram.ts` — Telegram detection, bootstrap, and typed session helpers.
-- `app/lib/useTelegramBootstrap.ts` — client hook for loading Telegram/session state.
-- `app/api/webhook/route.ts` — Telegram webhook endpoint.
-- `app/api/referrals/[userId]/route.ts` and `app/api/referrals/claim/route.ts` — existing referral endpoints retained for future API cleanup.
+1. Install [ngrok](https://ngrok.com/download) or use an alternative like [localtunnel](https://localtunnel.github.io/www/)
 
-## Notes
+2. Run ngrok to create a tunnel to your local server:
 
-- Telegram-specific APIs are treated as optional so the app stays stable when previewed in a regular browser.
-- The current gameplay screen is intentionally a shell so Phase 2 can replace it with a deterministic puzzle engine.
+```bash
+ngrok http 3000
+```
+
+3. Copy the HTTPS URL provided by ngrok (e.g., `https://abc123.ngrok.io`)
+
+4. Update your `.env.local` file with the ngrok URL:
+
+```env
+WEBAPP_URL=https://abc123.ngrok.io
+```
+
+#### Step 3: Start the Telegram Bot
+
+In a new terminal window, start the bot:
+
+```bash
+pnpm bot:dev
+# or use the compiled version
+pnpm bot:build
+pnpm bot:start
+```
+
+#### Step 4: Test Your Mini App
+
+1. Open Telegram and find your bot
+2. Send the `/start` command
+3. Click the "Open" button to launch your Mini App
+4. The Mini App should open with your local development server
+
+#### Development Tips
+
+- **Hot Reload**: The Next.js dev server supports hot reload. Changes to your code will automatically reflect in the Mini App.
+- **ngrok URL Changes**: Each time you restart ngrok, you'll get a new URL. Update your `.env.local` file and restart the bot when this happens.
+- **Debugging**: Use browser DevTools in Telegram Desktop or the Telegram Web version for easier debugging.
+- **Testing on Mobile**: The ngrok URL works on mobile devices too, so you can test on actual Telegram mobile apps.
+- **Bot Menu Button**: The bot automatically sets up a menu button that appears in the chat. This makes it easy to reopen your Mini App.
+
+#### Alternative: Using a Fixed Tunnel URL
+
+For a more stable development experience, consider:
+- ngrok paid plans (provides fixed URLs)
+- [localhost.run](https://localhost.run/) (free, but URLs change)
+- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (free, fixed URLs)
+
+## Telegram Bot Capabilities
+
+- Handles `/start` and opens the Mini App with Telegram `startapp` data encoded from the current chat.
+- Supports `/webapp` as a direct way to reopen the game from chat.
+- Processes bot updates through `app/api/webhook/route.ts`.
+- Includes referral tracking support through local API routes under `app/api/referrals`.
+- Keeps a health-checkable webhook endpoint at `GET /api/webhook`.
+
+From a product perspective, this bot is being adapted to launch the Pika CarJam game experience inside Telegram. The intended gameplay is a short-session parking puzzle where players slide vehicles, clear a path for the target car, retry quickly, and progress through simple mobile-friendly levels.
+
+### Project Structure
+
+- `/app` - Next.js app directory (Mini App frontend)
+- `app/api/webhook/route.ts` - Telegram webhook entry point and bot command handlers
+- `app/api/referrals/claim/route.ts` - Claim referral rewards
+- `app/api/referrals/[userId]/route.ts` - Fetch referral progress for a user
+
+### Available Commands
+
+**Frontend (Mini App):**
+- `pnpm dev` - Start development server
+- `pnpm build` - Build for production
+- `pnpm start` - Start production server
+- `pnpm lint` - Run ESLint
+
+**Bot:**
+- `pnpm bot:dev` - Start bot in development mode
+- `pnpm bot:build` - Compile TypeScript bot code
+- `pnpm bot:start` - Start compiled bot
+
+### Bot Commands
+
+- `/start` - Initialize the bot and display the Mini App button
+- `/webapp` - Open the Mini App
+
+You can start editing the game experience by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

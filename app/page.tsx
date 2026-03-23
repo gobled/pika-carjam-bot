@@ -1,388 +1,561 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { retrieveLaunchParams, type LaunchParams } from "@telegram-apps/sdk";
+import type { WebApp } from "telegram-web-app";
 import { CarJam } from "@/app/components/CarJam";
-import { getDisplayName } from "@/app/lib/telegram";
-import { useTelegramBootstrap } from "@/app/lib/useTelegramBootstrap";
+import { getTelegramWebApp } from "@/app/lib/telegram";
 
-type AppView =
-  | "loading"
-  | "home"
-  | "level-select"
-  | "gameplay"
-  | "victory-modal"
-  | "daily-reward-modal"
-  | "settings"
-  | "leaderboard";
-
+const INITIAL_PLAYS = 1000;
+const REFERRAL_REWARD_PLAYS = 3;
 const STORAGE_KEYS = {
-  soundEnabled: "pikaCarJamSoundEnabled",
+  highScore: "carJamHighScore",
+  muted: "carJamMuted",
+  lastResetDate: "carJamLastResetDate",
+  playsLeft: "carJamPlaysLeft",
 } as const;
 
-function AppShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(45,212,191,0.16),_transparent_36%),linear-gradient(180deg,#020617_0%,#111827_48%,#0f172a_100%)] px-4 py-5 text-slate-100 sm:px-6">
-      <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-md flex-col justify-center">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function StatusPill({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "warning" | "info" }) {
-  const toneClasses = {
-    default: "border-white/10 bg-white/5 text-slate-200",
-    warning: "border-amber-400/30 bg-amber-500/10 text-amber-100",
-    info: "border-sky-400/30 bg-sky-500/10 text-sky-100",
-  } as const;
-
-  return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${toneClasses[tone]}`}>
-      {children}
-    </span>
-  );
-}
-
-function ModalCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-slate-950/75 px-4 py-6 sm:items-center">
-      <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
-        <h2 className="text-2xl font-bold text-white">{title}</h2>
-        <p className="mt-2 text-sm text-slate-300">{description}</p>
-        <div className="mt-6">{children}</div>
-      </div>
-    </div>
-  );
-}
-
 export default function HomePage() {
-  const { environment, session, webApp, error, isLoading } = useTelegramBootstrap();
-  const [appView, setAppView] = useState<AppView>("loading");
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [webApp, setWebApp] = useState<WebApp | null>(null);
+  const [launchParams, setLaunchParams] = useState<LaunchParams | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [highScore, setHighScore] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playsLeft, setPlaysLeft] = useState<number>(INITIAL_PLAYS);
+  const [activeTab, setActiveTab] = useState<'play' | 'referrals'>('play');
+  const [referralStats, setReferralStats] = useState<{
+    totalReferrals: number;
+    unclaimedReferrals: number;
+  }>({ totalReferrals: 0, unclaimedReferrals: 0 });
 
   useEffect(() => {
-    const savedPreference = window.localStorage.getItem(STORAGE_KEYS.soundEnabled);
-    if (savedPreference !== null) {
-      setSoundEnabled(savedPreference === "true");
+    try {
+      setLaunchParams(retrieveLaunchParams());
+    } catch (error) {
+      console.warn("Unable to retrieve launch params outside Telegram.", error);
     }
-  }, []);
 
-  useEffect(() => {
-    setAppView(isLoading ? "loading" : "home");
-  }, [isLoading]);
+    // Load high score from localStorage
+    const savedHighScore = localStorage.getItem(STORAGE_KEYS.highScore);
+    if (savedHighScore) {
+      setHighScore(parseInt(savedHighScore, 10));
+    }
 
-  useEffect(() => {
-    const preventPullToRefresh = (event: TouchEvent) => {
-      if (event.touches.length > 1) {
-        return;
-      }
+    // Load mute preference from localStorage
+    const savedMutePreference = localStorage.getItem(STORAGE_KEYS.muted);
+    if (savedMutePreference) {
+      setIsMuted(savedMutePreference === "true");
+    }
 
-      const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      if (scrollTop <= 0) {
-        event.preventDefault();
+    // Initialize remaining plays with daily reset logic
+    const initializePlaysLeft = () => {
+      const today = new Date().toDateString(); // Get current date as string
+      const lastResetDate = localStorage.getItem(STORAGE_KEYS.lastResetDate);
+      const savedPlays = localStorage.getItem(STORAGE_KEYS.playsLeft);
+
+      // Check if we need to reset (new day or first time)
+      if (lastResetDate !== today) {
+        // New day - reset plays to the daily default
+        localStorage.setItem(STORAGE_KEYS.playsLeft, String(INITIAL_PLAYS));
+        localStorage.setItem(STORAGE_KEYS.lastResetDate, today);
+        setPlaysLeft(INITIAL_PLAYS);
+      } else {
+        // Same day - use saved plays
+        if (savedPlays === null) {
+          localStorage.setItem(STORAGE_KEYS.playsLeft, String(INITIAL_PLAYS));
+          setPlaysLeft(INITIAL_PLAYS);
+        } else {
+          const parsed = parseInt(savedPlays, 10);
+          setPlaysLeft(Number.isNaN(parsed) ? INITIAL_PLAYS : parsed);
+        }
       }
     };
 
-    document.addEventListener("touchmove", preventPullToRefresh, { passive: false });
-    return () => document.removeEventListener("touchmove", preventPullToRefresh);
+    initializePlaysLeft();
   }, []);
 
-  const displayName = useMemo(() => getDisplayName(session), [session]);
-  const username = session.user.username ? `@${session.user.username}` : null;
-  const hasSessionWarning = environment === "telegram" && !session.hasTelegramUser;
+  useEffect(() => {
+    // Prevent pull-to-refresh and overscroll
+    const preventPullToRefresh = (e: TouchEvent) => {
+      if (e.touches.length > 1) return;
 
-  const toggleSound = () => {
-    setSoundEnabled((current) => {
-      const next = !current;
-      window.localStorage.setItem(STORAGE_KEYS.soundEnabled, String(next));
-      webApp?.HapticFeedback?.impactOccurred?.("soft");
-      return next;
-    });
+      const target = e.target as HTMLElement;
+      const scrollY = window.scrollY || window.pageYOffset;
+
+      if (scrollY === 0 && e.touches[0].clientY > e.touches[0].pageY) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
+
+    return () => {
+      document.removeEventListener('touchmove', preventPullToRefresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Wait for Telegram WebApp script to load
+    const initTelegram = () => {
+      const tg = getTelegramWebApp();
+      if (!tg) {
+        return;
+      }
+
+      tg.ready();
+      tg.expand();
+
+      // Request fullscreen mode
+      if (tg.requestFullscreen) {
+        try {
+          tg.requestFullscreen();
+        } catch (error) {
+          console.warn("Failed to enter fullscreen mode:", error);
+        }
+      }
+
+      // Enable close confirmation (optional)
+      tg.enableClosingConfirmation();
+
+      // Lock orientation to portrait for mobile
+      if (tg.lockOrientation) {
+        tg.lockOrientation();
+      }
+
+      setWebApp(tg);
+    };
+
+    // Try immediately
+    initTelegram();
+
+    // Also try after a short delay in case script is still loading
+    const timer = setTimeout(initTelegram, 100);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const user = launchParams?.tgWebAppData?.user;
+  const fullName = useMemo(() => {
+    if (!user) {
+      return "Guest";
+    }
+    return user.last_name ? `${user.first_name} ${user.last_name}` : user.first_name;
+  }, [user]);
+
+  const username = user?.username ? `@${user.username}` : null;
+
+  // Fetch referral stats
+  useEffect(() => {
+    const fetchReferralStats = async () => {
+      if (!user?.id) return;
+
+      try {
+        const response = await fetch(`/api/referrals/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setReferralStats({
+            totalReferrals: data.totalReferrals || 0,
+            unclaimedReferrals: data.unclaimedReferrals || 0,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching referral stats:', error);
+      }
+    };
+
+    fetchReferralStats();
+    // Refresh stats when switching to referrals tab
+    if (activeTab === 'referrals') {
+      fetchReferralStats();
+    }
+  }, [user?.id, activeTab]);
+
+  const toggleMute = () => {
+    const newMuteState = !isMuted;
+    setIsMuted(newMuteState);
+    localStorage.setItem(STORAGE_KEYS.muted, newMuteState.toString());
+    if (webApp) {
+      webApp.HapticFeedback?.impactOccurred("soft");
+    }
   };
 
-  if (appView === "loading") {
-    return (
-      <AppShell>
-        <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-8 text-center shadow-2xl shadow-black/30 backdrop-blur">
-          <div className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-4 border-emerald-400/20 border-t-emerald-400" />
-          <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Pika CarJam</p>
-          <h1 className="mt-3 text-3xl font-bold text-white">Starting your garage...</h1>
-          <p className="mt-3 text-sm text-slate-300">
-            We&apos;re preparing the app shell and checking whether you launched from Telegram or a regular browser.
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
+  const handlePlay = () => {
+    if (playsLeft <= 0) {
+      if (webApp?.showAlert) {
+        webApp.showAlert(`No plays left. Come back tomorrow for ${INITIAL_PLAYS} more plays!`);
+      }
+      return;
+    }
+    if (webApp) {
+      webApp.expand();
+      webApp.HapticFeedback?.impactOccurred("medium");
+    }
+    // Consume a play when starting from the main screen
+    setPlaysLeft((prev) => {
+      const next = Math.max(prev - 1, 0);
+      localStorage.setItem(STORAGE_KEYS.playsLeft, String(next));
+      // Update the date to current day (in case user plays across midnight)
+      localStorage.setItem(STORAGE_KEYS.lastResetDate, new Date().toDateString());
+      return next;
+    });
+    setIsPlaying(true);
+  };
 
-  if (appView === "gameplay") {
+  const handleGameOver = (finalScore: number) => {
+    if (webApp) {
+      webApp.HapticFeedback?.notificationOccurred("success");
+    }
+    // Return to the main screen so there is only one main view
+    setIsPlaying(false);
+  };
+
+  const handleShareForPlay = async () => {
+    const botUsername = process.env.BOT_USERNAME;
+    if (!webApp) {
+      console.log("Share tapped outside Telegram");
+      return;
+    }
+    if (!botUsername) {
+      webApp?.showAlert?.('Sharing unavailable: bot username is not configured. Set NEXT_PUBLIC_BOT_USERNAME.');
+      return;
+    }
+
+    const text = 'Join me in Pika CarJam! Tap to play our Telegram Mini App.';
+    // Use startapp deep link so recipients add/open the bot Mini App directly
+    const startappPayload = user?.id ? `invite_${user.id}` : 'play';
+    const miniAppLink = `https://t.me/${botUsername}?start=${encodeURIComponent(startappPayload)}`;
+    const tgShare = `https://t.me/share/url?url=${encodeURIComponent(miniAppLink)}&text=${encodeURIComponent(text)}`;
+
+    try {
+      if (webApp && typeof webApp.openTelegramLink === 'function') {
+        webApp.openTelegramLink(tgShare);
+        webApp.HapticFeedback?.impactOccurred("soft");
+      } else if (typeof window !== 'undefined') {
+        // Fallback: try opening Telegram share link directly
+        window.open(tgShare, '_blank');
+      }
+    } catch (e) {
+      console.error('Error sharing:', e);
+    }
+  };
+
+  const handleClaimReferrals = async () => {
+    if (!user?.id) {
+      console.log("No user ID available");
+      return;
+    }
+
+    if (referralStats.unclaimedReferrals === 0) {
+      webApp?.showAlert?.("No referral rewards to claim!");
+      return;
+    }
+
+    try {
+      webApp?.HapticFeedback?.impactOccurred("soft");
+      const response = await fetch("/api/referrals/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        const message = typeof errorBody?.error === "string" ? errorBody.error : "Unable to claim rewards.";
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      const playsAwarded = data.playsAwarded || 0;
+
+      // Update plays left
+      setPlaysLeft((prev) => {
+        const next = prev + playsAwarded;
+        localStorage.setItem(STORAGE_KEYS.playsLeft, String(next));
+        // Update the date to current day
+        localStorage.setItem(STORAGE_KEYS.lastResetDate, new Date().toDateString());
+        return next;
+      });
+
+      // Update referral stats
+      setReferralStats((prev) => ({
+        ...prev,
+        unclaimedReferrals: 0,
+      }));
+
+      webApp?.HapticFeedback?.notificationOccurred("success");
+      webApp?.showPopup?.({
+        title: "Rewards Claimed!",
+        message: `You received ${playsAwarded} plays from ${data.rewardsClaimed} referral${data.rewardsClaimed > 1 ? 's' : ''}!`,
+        buttons: [{ type: "close", text: "Awesome!" }],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unexpected error";
+      if (webApp?.showAlert) {
+        webApp.showAlert(message);
+      } else {
+        console.error("Claim referrals error:", error);
+      }
+    }
+  };
+
+  const handleBuySticker = async () => {
+    if (!webApp) {
+      console.log("Buy Sticker tapped outside Telegram");
+      return;
+    }
+
+    if (!user?.id) {
+      webApp.showAlert("We could not determine your Telegram account. Please try again.");
+      return;
+    }
+
+    try {
+      webApp.HapticFeedback?.impactOccurred("soft");
+      const response = await fetch("/api/payments/invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: "sticker", userId: user.id }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        const message = typeof errorBody?.error === "string" ? errorBody.error : "Unable to start purchase.";
+        throw new Error(message);
+      }
+
+      const data = (await response.json()) as { invoiceUrl?: string };
+      if (!data.invoiceUrl) {
+        throw new Error("Invoice URL missing in response.");
+      }
+
+      webApp.openInvoice(data.invoiceUrl, (status) => {
+        if (status === "paid") {
+          webApp.showPopup?.({
+            title: "Thanks!",
+            message: "Sticker pack purchase confirmed. Check the chat for details.",
+            buttons: [{ type: "close", text: "Close" }],
+          });
+        } else if (status === "failed") {
+          webApp.showAlert("Payment failed. Please try again.");
+        }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unexpected error";
+      if (webApp.showAlert) {
+        webApp.showAlert(message);
+      } else {
+        console.error("Sticker purchase error:", error);
+      }
+    }
+  };
+
+  if (isPlaying) {
     return (
       <CarJam
-        levelLabel="Level 1 · Traffic Warm-up"
-        session={session}
-        soundEnabled={soundEnabled}
-        onBack={() => setAppView("home")}
-        onOpenSettings={() => setAppView("settings")}
-        onVictory={() => setAppView("victory-modal")}
+        onGameOver={handleGameOver}
+        onBack={() => setIsPlaying(false)}
       />
     );
   }
 
   return (
-    <>
-      <AppShell>
-        <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-black/30 backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Pika CarJam MVP</p>
-              <h1 className="mt-3 text-3xl font-bold text-white">{displayName}</h1>
-              <p className="mt-2 text-sm text-slate-300">
-                {environment === "telegram"
-                  ? "Your Telegram mini app shell is ready for puzzle screens."
-                  : "Running in browser fallback mode for local development."}
-                {username ? ` ${username}` : ""}
-              </p>
-            </div>
-            <StatusPill tone={environment === "telegram" ? "info" : "default"}>
-              {environment === "telegram" ? "Telegram" : "Browser"}
-            </StatusPill>
-          </div>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-black px-6 py-12 text-slate-100" style={{ overflowY: 'auto', overscrollBehavior: 'none' }}>
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/10 p-10 text-center backdrop-blur" style={{ touchAction: 'pan-y' }}>
+        <h1 className="text-4xl font-bold text-white mb-2">Pika CarJam</h1>
+        <p className="text-slate-400">Clear the traffic jam and help the car escape!</p>
+        <p className="mt-2 mb-6 text-sm text-slate-300">
+          Welcome, {fullName}{username ? ` (${username})` : ''}
+        </p>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <StatusPill>{session.startParam ? `start: ${session.startParam}` : "no start param"}</StatusPill>
-            <StatusPill>{session.launchSource ?? "unknown source"}</StatusPill>
-            <StatusPill>{soundEnabled ? "sound on" : "sound off"}</StatusPill>
-          </div>
-
-          {(error || hasSessionWarning) && (
-            <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-amber-100">Session fallback active</p>
-                  <p className="mt-1 text-sm text-amber-50/90">
-                    {error ?? "Telegram opened the app without user details. We&apos;ll continue with a safe guest shell until session data is available."}
-                  </p>
-                </div>
-                <StatusPill tone="warning">Guest mode</StatusPill>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">Top-level app states</p>
-                <p className="mt-1 text-sm text-slate-300">
-                  Phase 1 wires every planned MVP screen into a stable shell so later gameplay work can focus on the puzzle engine.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={toggleSound}
-                className="rounded-full border border-white/10 bg-slate-950/70 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-950"
-              >
-                {soundEnabled ? "🔊 On" : "🔇 Off"}
-              </button>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3 text-left text-sm">
-              <button
-                type="button"
-                onClick={() => setAppView("level-select")}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
-              >
-                <p className="font-semibold text-white">Level select</p>
-                <p className="mt-1 text-slate-400">Choose the first puzzle pack.</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppView("leaderboard")}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
-              >
-                <p className="font-semibold text-white">Leaderboard</p>
-                <p className="mt-1 text-slate-400">Preview the upcoming social screen.</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppView("settings")}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
-              >
-                <p className="font-semibold text-white">Settings</p>
-                <p className="mt-1 text-slate-400">Check safe toggles and session info.</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppView("daily-reward-modal")}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
-              >
-                <p className="font-semibold text-white">Daily reward</p>
-                <p className="mt-1 text-slate-400">Open the modal state for rewards.</p>
-              </button>
-            </div>
-          </div>
-
-          {appView === "home" && (
-            <div className="mt-6 rounded-[1.75rem] border border-emerald-500/20 bg-emerald-500/10 p-5">
-              <p className="text-sm font-semibold text-emerald-100">Ready to start</p>
-              <p className="mt-1 text-sm text-emerald-50/90">
-                The home screen is now driven by a stable session model instead of Telegram calls being embedded directly in the page UI.
-              </p>
-              <button
-                type="button"
-                onClick={() => setAppView("level-select")}
-                className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-base font-semibold text-slate-950 transition hover:bg-emerald-300"
-              >
-                Start puzzle flow
-              </button>
-            </div>
-          )}
-
-          {appView === "level-select" && (
-            <section className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Level select</p>
-                  <p className="mt-1 text-sm text-slate-400">A simple launch pack placeholder keeps navigation stable while the puzzle engine lands.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAppView("home")}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10"
-                >
-                  Back
-                </button>
-              </div>
-
-              <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Tutorial pack</p>
-                <h2 className="mt-2 text-xl font-bold text-white">Traffic Warm-up</h2>
-                <p className="mt-2 text-sm text-slate-300">One starter puzzle slot is enough to validate the shell in Telegram and local browsers.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    webApp?.HapticFeedback?.impactOccurred?.("medium");
-                    setAppView("gameplay");
-                  }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-base font-semibold text-slate-950 transition hover:bg-emerald-300"
-                >
-                  Play level 1
-                </button>
-              </div>
-            </section>
-          )}
-
-          {appView === "settings" && (
-            <section className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Settings</p>
-                  <p className="mt-1 text-sm text-slate-400">Progressive enhancement stays optional so browser fallback remains usable.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAppView("home")}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10"
-                >
-                  Back
-                </button>
-              </div>
-              <dl className="mt-4 space-y-3 text-sm text-slate-300">
-                <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <dt>Sound</dt>
-                  <dd>{soundEnabled ? "Enabled" : "Disabled"}</dd>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <dt>Telegram user</dt>
-                  <dd>{session.hasTelegramUser ? "Available" : "Fallback guest"}</dd>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <dt>Init data</dt>
-                  <dd>{session.rawInitData ? "Present" : "Unavailable"}</dd>
-                </div>
-              </dl>
-            </section>
-          )}
-
-          {appView === "leaderboard" && (
-            <section className="mt-6 rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Leaderboard</p>
-                  <p className="mt-1 text-sm text-slate-400">This placeholder keeps the route-less MVP flow visible without mixing in non-game referral features.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setAppView("home")}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10"
-                >
-                  Back
-                </button>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                {[
-                  ["Pika Pilot", "12 stars"],
-                  [displayName, "You · shell ready"],
-                  ["Turbo Turtle", "9 stars"],
-                ].map(([name, score], index) => (
-                  <div key={name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <span>{index + 1}. {name}</span>
-                    <span>{score}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-8 border-b border-white/10">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('play');
+              if (webApp) webApp.HapticFeedback?.impactOccurred("soft");
+            }}
+            className={`flex-1 pb-3 text-sm font-semibold transition ${
+              activeTab === 'play'
+                ? 'text-emerald-400 border-b-2 border-emerald-400'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('referrals');
+              if (webApp) webApp.HapticFeedback?.impactOccurred("soft");
+            }}
+            className={`flex-1 pb-3 text-sm font-semibold transition relative ${
+              activeTab === 'referrals'
+                ? 'text-emerald-400 border-b-2 border-emerald-400'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            Referrals
+            {referralStats.unclaimedReferrals > 0 && (
+              <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {referralStats.unclaimedReferrals}
+              </span>
+            )}
+          </button>
         </div>
-      </AppShell>
 
-      {appView === "victory-modal" && (
-        <ModalCard
-          title="Puzzle cleared!"
-          description="The victory modal state is wired up and ready for real move counts, stars, and next-level actions in later phases."
-        >
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
-              Placeholder result: 3 stars, 12 moves, 1 happy escape car.
+        {/* Play Tab Content */}
+        {activeTab === 'play' && (
+          <>
+            {/* High Score Display */}
+            {highScore > 0 && (
+              <div className="mb-8 rounded-2xl border border-emerald-500/30 bg-emerald-950/30 p-4">
+                <p className="text-xs text-emerald-400">High Score</p>
+                <p className="text-3xl font-bold text-emerald-400">{highScore}</p>
+              </div>
+            )}
+
+            {/* Plays Left */}
+            <div className="mb-4">
+              <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-200 border border-white/10">
+                Plays left: {playsLeft}
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* Mute Button */}
+            <div className="mb-4 flex justify-center gap-4">
               <button
                 type="button"
-                onClick={() => setAppView("level-select")}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                onClick={toggleMute}
+                className="rounded-lg bg-black/50 px-6 py-3 backdrop-blur transition hover:bg-black/70 border border-white/10"
+                aria-label={isMuted ? "Unmute sound" : "Mute sound"}
               >
-                Level map
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppView("gameplay")}
-                className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
-              >
-                Next level
+                <span className="text-2xl">
+                  {isMuted ? "🔇" : "🔊"}
+                </span>
+                <p className="text-xs text-slate-300 mt-1">
+                  {isMuted ? "Muted" : "Sound On"}
+                </p>
               </button>
             </div>
-          </div>
-        </ModalCard>
-      )}
 
-      {appView === "daily-reward-modal" && (
-        <ModalCard
-          title="Daily reward"
-          description="This state is ready for future persistence hooks and reward APIs, while still being safe to preview in local development."
-        >
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-50">
-              Come back tomorrow to collect your next booster crate.
-            </div>
             <button
               type="button"
-              onClick={() => setAppView("home")}
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-sky-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300"
+              onClick={handlePlay}
+              disabled={playsLeft <= 0}
+              className={`mt-2 inline-flex w-full items-center justify-center rounded-full px-6 py-3 text-lg font-semibold text-white shadow-lg transition focus:outline-none focus-visible:ring-2 ${
+                playsLeft > 0
+                  ? "bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-400 focus-visible:ring-emerald-300"
+                  : "bg-gray-600 cursor-not-allowed"
+              }`}
             >
-              Back to home
+              {playsLeft > 0 ? "Play" : "No plays left"}
             </button>
+
+            <button
+              type="button"
+              onClick={handleShareForPlay}
+              className="mt-3 inline-flex w-full items-center justify-center rounded-full px-6 py-2 text-sm font-semibold transition border bg-blue-500/90 text-white border-blue-400 hover:bg-blue-500"
+            >
+              📤 Share & Invite Friends
+            </button>
+          </>
+        )}
+
+        {/* Referrals Tab Content */}
+        {activeTab === 'referrals' && (
+          <>
+            <div className="mb-6 text-left">
+              <h2 className="text-2xl font-bold text-white mb-2">Invite Friends</h2>
+              <p className="text-sm text-slate-300">
+                Share your invite link and get <span className="text-emerald-400 font-semibold">{REFERRAL_REWARD_PLAYS} plays</span> for each friend who joins!
+              </p>
+            </div>
+
+            {/* Referral Stats */}
+            <div className="mb-6 space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-slate-400 text-sm">Total Referrals</span>
+                  <span className="text-white text-2xl font-bold">{referralStats.totalReferrals}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-sm">Unclaimed Rewards</span>
+                  <span className="text-emerald-400 text-2xl font-bold">{referralStats.unclaimedReferrals}</span>
+                </div>
+              </div>
+
+              {referralStats.unclaimedReferrals > 0 && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4">
+                  <p className="text-emerald-400 text-sm mb-1">
+                    🎉 You have {referralStats.unclaimedReferrals} pending referral{referralStats.unclaimedReferrals > 1 ? 's' : ''}!
+                  </p>
+                  <p className="text-slate-300 text-xs">
+                    Claim to get {referralStats.unclaimedReferrals * REFERRAL_REWARD_PLAYS} plays
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Claim Button */}
+            <button
+              type="button"
+              onClick={handleClaimReferrals}
+              disabled={referralStats.unclaimedReferrals === 0}
+              className={`w-full inline-flex items-center justify-center rounded-full px-6 py-3 text-lg font-semibold text-white shadow-lg transition focus:outline-none focus-visible:ring-2 mb-3 ${
+                referralStats.unclaimedReferrals > 0
+                  ? "bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-400 focus-visible:ring-emerald-300"
+                  : "bg-gray-600 cursor-not-allowed"
+              }`}
+            >
+              {referralStats.unclaimedReferrals > 0
+                ? `Claim ${referralStats.unclaimedReferrals * REFERRAL_REWARD_PLAYS} Plays`
+                : 'No Rewards to Claim'}
+            </button>
+
+            {/* Share Button */}
+            <button
+              type="button"
+              onClick={handleShareForPlay}
+              className="w-full inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold bg-blue-500/90 text-white border border-blue-400 hover:bg-blue-500 transition"
+            >
+              📤 Share Invite Link
+            </button>
+
+            <p className="mt-4 text-xs text-slate-400">
+              Share your link with friends. When they join and play, you'll earn {REFERRAL_REWARD_PLAYS} plays per referral!
+            </p>
+          </>
+        )}
+        {/* <div className="mt-8 space-y-3 rounded-2xl border border-white/10 bg-black/30 p-5 text-left">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-wide text-emerald-400">Limited Drop</p>
+              <p className="text-lg font-semibold text-white">Task Board Sticker Pack</p>
+            </div>
+            <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-emerald-300">
+              10 Stars
+            </span>
           </div>
-        </ModalCard>
-      )}
-    </>
+          <p className="text-sm text-slate-300">
+            Grab a holographic sticker trio to celebrate your Task Board progress. Tap buy to
+            trigger the in-chat Stars payment flow.
+          </p>
+          <button
+            type="button"
+            onClick={handleBuySticker}
+            className="inline-flex w-full items-center justify-center rounded-full bg-emerald-500 px-6 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-500/30 transition hover:bg-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+          >
+            Buy Sticker Pack 1
+          </button>
+        </div> */}
+
+        {!webApp && (
+          <p className="mt-6 text-xs text-amber-300">
+            Open this Mini App inside Telegram to access the full experience.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
