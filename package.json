@@ -9,8 +9,7 @@
     "lint": "next lint",
     "bot:dev": "ts-node bot/index.ts",
     "bot:build": "tsc -p bot/tsconfig.json",
-    "bot:start": "node dist/bot/index.js",
-    "test:game": "rm -rf .tmp-test-build && tsc -p tsconfig.game-tests.json && node .tmp-test-build/scripts_test_game_engine.js"
+    "bot:start": "node dist/bot/index.js"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
