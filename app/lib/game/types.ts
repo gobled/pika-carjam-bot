@@ -5,29 +5,45 @@ export type BoardSize = {
 
 export type VehicleOrientation = "horizontal" | "vertical";
 
-export type VehicleRole = "target" | "car" | "truck";
-
-export type VehicleFacing = "left" | "right" | "up" | "down";
-
 export type VehicleState = {
   id: string;
   x: number;
   y: number;
   length: number;
   orientation: VehicleOrientation;
-  role: VehicleRole;
-  facing: VehicleFacing;
+  colorKey: string;
+  capacity: number;
+  occupancy: number;
+  skinKey?: string;
 };
 
-export type ExitPosition =
-  | {
-      side: "left" | "right";
-      row: number;
-    }
-  | {
-      side: "top" | "bottom";
-      column: number;
-    };
+export type PassengerColorKey = string;
+
+export type MoveInput = {
+  vehicleId: string;
+  delta: number;
+};
+
+export type InvalidMoveReason =
+  | "vehicle_not_found"
+  | "invalid_delta"
+  | "out_of_bounds"
+  | "path_blocked";
+
+export type MoveValidationFailure = {
+  ok: false;
+  reason: InvalidMoveReason;
+  message: string;
+  blockedByVehicleId?: string;
+  attemptedPosition?: { x: number; y: number };
+};
+
+export type MoveValidationSuccess = {
+  ok: true;
+  delta: number;
+};
+
+export type MoveValidationResult = MoveValidationFailure | MoveValidationSuccess;
 
 export type BoardCell = {
   x: number;
@@ -40,74 +56,54 @@ export type BoardOccupancy = {
   byCoordinate: Map<string, string>;
 };
 
-export type MoveDirection = "forward";
-
-export type MoveInput = {
+export type BoardingEvent = {
+  type: "boarded" | "departed";
   vehicleId: string;
-  distance: number;
+  colorKey: string;
+  queueColor: string;
+  occupancy: number;
+  capacity: number;
 };
-
-export type InvalidMoveReason =
-  | "vehicle_not_found"
-  | "invalid_distance"
-  | "wrong_direction"
-  | "path_blocked"
-  | "out_of_bounds";
-
-export type MoveValidationFailure = {
-  ok: false;
-  reason: InvalidMoveReason;
-  message: string;
-  blockedByVehicleId?: string;
-  attemptedPosition?: { x: number; y: number };
-};
-
-export type MoveValidationSuccess = {
-  ok: true;
-  direction: MoveDirection;
-  distance: number;
-};
-
-export type MoveValidationResult = MoveValidationFailure | MoveValidationSuccess;
 
 export type MoveRecord = {
   vehicleId: string;
-  distance: number;
-  direction: MoveDirection;
+  delta: number;
   vehiclesBefore: VehicleState[];
   vehiclesAfter: VehicleState[];
-  escaped?: boolean;
+  queueBefore: PassengerColorKey[];
+  queueAfter: PassengerColorKey[];
+  boardingEvents: BoardingEvent[];
+};
+
+export type HintSuggestion = {
+  vehicleId: string;
+  delta: number;
+  explanation: string;
 };
 
 export type HintRequest = {
   state: GameState;
 };
 
-export type HintSuggestion = {
-  vehicleId: string;
-  distance: number;
-  explanation: string;
-};
-
 export type HintProvider = (request: HintRequest) => HintSuggestion | null;
 
 export type GameState = {
   board: BoardSize;
-  exit: ExitPosition;
-  targetVehicleId: string;
   vehicles: VehicleState[];
   initialVehicles: VehicleState[];
+  passengerQueue: PassengerColorKey[];
+  initialPassengerQueue: PassengerColorKey[];
   history: MoveRecord[];
   moveCount: number;
   hasWon: boolean;
+  boardingEvents: BoardingEvent[];
   hintProvider?: HintProvider;
 };
 
 export type CreateGameStateInput = {
   board: BoardSize;
-  exit: ExitPosition;
-  targetVehicleId: string;
   vehicles: VehicleState[];
+  passengerQueue: PassengerColorKey[];
   hintProvider?: HintProvider;
 };
 
