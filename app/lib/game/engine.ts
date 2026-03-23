@@ -232,7 +232,7 @@ export function getLegalMoves(state: GameState): MoveInput[] {
   return moves;
 }
 
-function hasClearPathToQueue(state: GameState, vehicle: VehicleState) {
+export function canVehicleReachBoardingLane(state: GameState, vehicle: VehicleState) {
   const occupancy = buildBoardOccupancy(state.vehicles);
 
   for (const cell of getVehicleCells(vehicle)) {
@@ -261,7 +261,7 @@ function resolveBoarding(state: GameState) {
   while (workingQueue.length > 0) {
     const nextColor = workingQueue[0];
     const candidate = workingVehicles.find(
-      (vehicle) => vehicle.colorKey === nextColor && vehicle.occupancy < vehicle.capacity && hasClearPathToQueue({ ...state, vehicles: workingVehicles }, vehicle),
+      (vehicle) => vehicle.colorKey === nextColor && vehicle.occupancy < vehicle.capacity && canVehicleReachBoardingLane({ ...state, vehicles: workingVehicles }, vehicle),
     );
 
     if (!candidate) {
