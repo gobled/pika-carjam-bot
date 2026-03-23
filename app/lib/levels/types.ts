@@ -1,4 +1,4 @@
-import type { ExitPosition, VehicleFacing, VehicleRole, VehicleState, VehicleOrientation } from "../game";
+import type { ExitPosition, VehicleRole, VehicleState, VehicleOrientation } from "../game";
 
 export type LevelVehicleDefinition = {
   id: string;
@@ -7,7 +7,6 @@ export type LevelVehicleDefinition = {
   length: number;
   orientation: VehicleOrientation;
   role: VehicleRole;
-  facing: VehicleFacing;
   colorKey?: string;
   skinKey?: string;
 };
@@ -89,6 +88,5 @@ export function toGameVehicleState(vehicle: LevelVehicleDefinition): VehicleStat
     length: vehicle.length,
     orientation: vehicle.orientation,
     role: vehicle.role,
-    facing: vehicle.facing,
   };
 }

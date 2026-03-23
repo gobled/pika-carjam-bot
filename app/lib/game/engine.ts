@@ -7,7 +7,6 @@ import type {
   MoveResult,
   MoveValidationResult,
   UndoResult,
-  VehicleFacing,
   VehicleState,
 } from "./types";
 
@@ -17,32 +16,6 @@ function cloneVehicles(vehicles: VehicleState[]) {
 
 function toCoordinateKey(x: number, y: number) {
   return `${x},${y}`;
-}
-
-function getForwardStep(facing: VehicleFacing) {
-  switch (facing) {
-    case "left":
-      return { x: -1, y: 0 };
-    case "right":
-      return { x: 1, y: 0 };
-    case "up":
-      return { x: 0, y: -1 };
-    case "down":
-      return { x: 0, y: 1 };
-    default:
-      return { x: 0, y: 0 };
-  }
-}
-
-function isFacingCompatible(vehicle: VehicleState) {
-  return (
-    (vehicle.orientation === "horizontal" && (vehicle.facing === "left" || vehicle.facing === "right")) ||
-    (vehicle.orientation === "vertical" && (vehicle.facing === "up" || vehicle.facing === "down"))
-  );
-}
-
-function getForwardSign(vehicle: VehicleState) {
-  return vehicle.facing === "left" || vehicle.facing === "up" ? -1 : 1;
 }
 
 export function getVehicleCells(vehicle: VehicleState) {
@@ -77,10 +50,6 @@ function assertVehicleShape(vehicle: VehicleState) {
 
   if (!Number.isInteger(vehicle.x) || !Number.isInteger(vehicle.y)) {
     throw new Error(`Vehicle ${vehicle.id} must use integer coordinates.`);
-  }
-
-  if (!isFacingCompatible(vehicle)) {
-    throw new Error(`Vehicle ${vehicle.id} must face along its movement axis.`);
   }
 }
 
@@ -122,49 +91,21 @@ function getVehicleById(state: GameState, vehicleId: string) {
 }
 
 function moveVehicleByDistance(vehicle: VehicleState, distance: number): VehicleState {
-  const signedDistance = distance * getForwardSign(vehicle);
   return vehicle.orientation === "horizontal"
-    ? { ...vehicle, x: vehicle.x + signedDistance }
-    : { ...vehicle, y: vehicle.y + signedDistance };
+    ? { ...vehicle, x: vehicle.x + distance }
+    : { ...vehicle, y: vehicle.y + distance };
 }
 
-function getLeadingEdgeCell(vehicle: VehicleState, stepDistance: number) {
-  const forwardSign = getForwardSign(vehicle);
-  const signedDistance = stepDistance * forwardSign;
-
+function getLeadingEdgeCell(vehicle: VehicleState, stepOffset: number) {
   if (vehicle.orientation === "horizontal") {
-    return signedDistance > 0
-      ? { x: vehicle.x + vehicle.length - 1 + signedDistance, y: vehicle.y }
-      : { x: vehicle.x + signedDistance, y: vehicle.y };
+    return stepOffset > 0
+      ? { x: vehicle.x + vehicle.length - 1 + stepOffset, y: vehicle.y }
+      : { x: vehicle.x + stepOffset, y: vehicle.y };
   }
 
-  return signedDistance > 0
-    ? { x: vehicle.x, y: vehicle.y + vehicle.length - 1 + signedDistance }
-    : { x: vehicle.x, y: vehicle.y + signedDistance };
-}
-
-function isCoordinateInsideBoard(state: GameState, coordinate: { x: number; y: number }) {
-  return (
-    coordinate.x >= 0 &&
-    coordinate.y >= 0 &&
-    coordinate.x < state.board.width &&
-    coordinate.y < state.board.height
-  );
-}
-
-function canTargetEscapeThroughExit(state: GameState, vehicle: VehicleState) {
-  switch (state.exit.side) {
-    case "left":
-      return vehicle.orientation === "horizontal" && vehicle.facing === "left" && vehicle.y === state.exit.row;
-    case "right":
-      return vehicle.orientation === "horizontal" && vehicle.facing === "right" && vehicle.y === state.exit.row;
-    case "top":
-      return vehicle.orientation === "vertical" && vehicle.facing === "up" && vehicle.x === state.exit.column;
-    case "bottom":
-      return vehicle.orientation === "vertical" && vehicle.facing === "down" && vehicle.x === state.exit.column;
-    default:
-      return false;
-  }
+  return stepOffset > 0
+    ? { x: vehicle.x, y: vehicle.y + vehicle.length - 1 + stepOffset }
+    : { x: vehicle.x, y: vehicle.y + stepOffset };
 }
 
 export function validateMove(state: GameState, move: MoveInput): MoveValidationResult {
@@ -186,14 +127,6 @@ export function validateMove(state: GameState, move: MoveInput): MoveValidationR
     };
   }
 
-  if (move.distance < 0) {
-    return {
-      ok: false,
-      reason: "wrong_direction",
-      message: `Vehicle ${vehicle.id} can only move forward.`,
-    };
-  }
-
   const occupancy = buildBoardOccupancy(state.vehicles);
   occupancy.byCoordinate.forEach((_, coordinateKey) => {
     if (occupancy.byCoordinate.get(coordinateKey) === vehicle.id) {
@@ -201,10 +134,18 @@ export function validateMove(state: GameState, move: MoveInput): MoveValidationR
     }
   });
 
-  for (let stepIndex = 1; stepIndex <= move.distance; stepIndex += 1) {
-    const nextCell = getLeadingEdgeCell(vehicle, stepIndex);
+  const step = Math.sign(move.distance);
+  const stepsToCheck = Math.abs(move.distance);
 
-    if (!isCoordinateInsideBoard(state, nextCell)) {
+  for (let stepIndex = 1; stepIndex <= stepsToCheck; stepIndex += 1) {
+    const nextCell = getLeadingEdgeCell(vehicle, step * stepIndex);
+
+    if (
+      nextCell.x < 0 ||
+      nextCell.y < 0 ||
+      nextCell.x >= state.board.width ||
+      nextCell.y >= state.board.height
+    ) {
       return {
         ok: false,
         reason: "out_of_bounds",
@@ -227,63 +168,47 @@ export function validateMove(state: GameState, move: MoveInput): MoveValidationR
 
   return {
     ok: true,
-    direction: "forward",
+    direction: move.distance > 0 ? "forward" : "backward",
     distance: move.distance,
   };
 }
 
-export function canVehicleEscape(state: GameState, vehicleId: string) {
-  const vehicle = getVehicleById(state, vehicleId);
-  if (!vehicle) {
-    return null;
-  }
-
-  if (vehicle.id === state.targetVehicleId && !canTargetEscapeThroughExit(state, vehicle)) {
-    return null;
-  }
-
-  const occupancy = buildBoardOccupancy(state.vehicles);
-  occupancy.byCoordinate.forEach((_, coordinateKey) => {
-    if (occupancy.byCoordinate.get(coordinateKey) === vehicle.id) {
-      occupancy.byCoordinate.delete(coordinateKey);
-    }
-  });
-
-  const step = getForwardStep(vehicle.facing);
-  const frontCell =
-    vehicle.orientation === "horizontal"
-      ? vehicle.facing === "right"
-        ? { x: vehicle.x + vehicle.length - 1, y: vehicle.y }
-        : { x: vehicle.x, y: vehicle.y }
-      : vehicle.facing === "down"
-        ? { x: vehicle.x, y: vehicle.y + vehicle.length - 1 }
-        : { x: vehicle.x, y: vehicle.y };
-
-  let distance = 0;
-  let current = frontCell;
-
-  while (true) {
-    current = { x: current.x + step.x, y: current.y + step.y };
-    distance += 1;
-
-    if (!isCoordinateInsideBoard(state, current)) {
-      return { vehicle, distance };
-    }
-
-    const blockingVehicleId = occupancy.byCoordinate.get(toCoordinateKey(current.x, current.y));
-    if (blockingVehicleId) {
-      return null;
-    }
-  }
-}
-
 export function isWinningState(state: GameState) {
   const targetVehicle = getVehicleById(state, state.targetVehicleId);
-  if (targetVehicle) {
+  if (!targetVehicle) {
     return false;
   }
 
-  return state.history.some((record) => record.vehicleId === state.targetVehicleId && record.escaped);
+  const targetCells = getVehicleCells(targetVehicle);
+
+  switch (state.exit.side) {
+    case "left": {
+      const { row } = state.exit;
+      return targetVehicle.orientation === "horizontal" && targetVehicle.x === 0 && targetCells.some((cell) => cell.y === row);
+    }
+    case "right": {
+      const { row } = state.exit;
+      return (
+        targetVehicle.orientation === "horizontal" &&
+        targetVehicle.x + targetVehicle.length - 1 === state.board.width - 1 &&
+        targetCells.some((cell) => cell.y === row)
+      );
+    }
+    case "top": {
+      const { column } = state.exit;
+      return targetVehicle.orientation === "vertical" && targetVehicle.y === 0 && targetCells.some((cell) => cell.x === column);
+    }
+    case "bottom": {
+      const { column } = state.exit;
+      return (
+        targetVehicle.orientation === "vertical" &&
+        targetVehicle.y + targetVehicle.length - 1 === state.board.height - 1 &&
+        targetCells.some((cell) => cell.x === column)
+      );
+    }
+    default:
+      return false;
+  }
 }
 
 export function createGameState(input: CreateGameStateInput): GameState {
@@ -346,47 +271,6 @@ export function moveVehicle(state: GameState, move: MoveInput): MoveResult {
   };
 
   const hasWon = isWinningState(nextState);
-  nextState.hasWon = hasWon;
-
-  return {
-    ok: true,
-    state: nextState,
-    move: nextState.history[nextState.history.length - 1],
-    hasWon,
-  };
-}
-
-export function escapeVehicle(state: GameState, vehicleId: string): MoveResult {
-  const escapeRoute = canVehicleEscape(state, vehicleId);
-  if (!escapeRoute) {
-    return {
-      ok: false,
-      state,
-      reason: "path_blocked",
-      message: `Vehicle ${vehicleId} does not have a clear forward exit.`,
-    };
-  }
-
-  const vehiclesBefore = cloneVehicles(state.vehicles);
-  const vehiclesAfter = state.vehicles.filter((vehicle) => vehicle.id !== vehicleId).map((vehicle) => ({ ...vehicle }));
-  const nextState: GameState = {
-    ...state,
-    vehicles: vehiclesAfter,
-    history: [
-      ...state.history,
-      {
-        vehicleId,
-        distance: escapeRoute.distance,
-        direction: "forward",
-        vehiclesBefore,
-        vehiclesAfter: cloneVehicles(vehiclesAfter),
-        escaped: true,
-      },
-    ],
-    moveCount: state.moveCount + 1,
-  };
-
-  const hasWon = vehicleId === state.targetVehicleId;
   nextState.hasWon = hasWon;
 
   return {

@@ -1,4 +1,4 @@
-import { canVehicleEscape, createGameState, escapeVehicle, moveVehicle, validateMove } from "../game";
+import { createGameState, moveVehicle, validateMove } from "../game";
 import type { GameState, MoveInput } from "../game";
 import type { LevelDefinition, SolvedLevelResult } from "./types";
 import { toGameVehicleState } from "./types";
@@ -10,23 +10,21 @@ function serializeState(state: GameState) {
     .join("|");
 }
 
-function enumerateMoves(state: GameState): Array<MoveInput | { vehicleId: string; escape: true }> {
-  const moves: Array<MoveInput | { vehicleId: string; escape: true }> = [];
+function enumerateMoves(state: GameState): MoveInput[] {
+  const moves: MoveInput[] = [];
 
   for (const vehicle of state.vehicles) {
-    let distance = 1;
-    while (true) {
-      const validation = validateMove(state, { vehicleId: vehicle.id, distance });
-      if (!validation.ok) {
-        break;
+    for (const direction of [-1, 1] as const) {
+      let distance = direction;
+      while (true) {
+        const validation = validateMove(state, { vehicleId: vehicle.id, distance });
+        if (!validation.ok) {
+          break;
+        }
+
+        moves.push({ vehicleId: vehicle.id, distance });
+        distance += direction;
       }
-
-      moves.push({ vehicleId: vehicle.id, distance });
-      distance += 1;
-    }
-
-    if (canVehicleEscape(state, vehicle.id)) {
-      moves.push({ vehicleId: vehicle.id, escape: true });
     }
   }
 
@@ -59,7 +57,7 @@ export function solveLevel(level: LevelDefinition): SolvedLevelResult | null {
     }
 
     for (const move of enumerateMoves(current.state)) {
-      const result = "escape" in move ? escapeVehicle(current.state, move.vehicleId) : moveVehicle(current.state, move);
+      const result = moveVehicle(current.state, move);
       if (!result.ok) {
         continue;
       }
@@ -72,7 +70,7 @@ export function solveLevel(level: LevelDefinition): SolvedLevelResult | null {
       visited.add(key);
       queue.push({
         state: result.state,
-        moves: [...current.moves, { vehicleId: move.vehicleId, distance: "escape" in move ? result.move.distance : move.distance }],
+        moves: [...current.moves, { vehicleId: move.vehicleId, distance: move.distance }],
       });
     }
   }

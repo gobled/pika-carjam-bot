@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createGameStateFromLevel, getLevelById, getNextLevelMetadata, getStarRating } from "@/app/lib/levels";
-import { canVehicleEscape, escapeVehicle, getHintSuggestion, moveVehicle, resetGame, undoMove, validateMove } from "@/app/lib/game";
+import { getHintSuggestion, moveVehicle, resetGame, undoMove, validateMove } from "@/app/lib/game";
 import type { MoveInput, VehicleState } from "@/app/lib/game";
 import type { TelegramSession } from "@/app/lib/telegram";
 
@@ -37,34 +37,12 @@ type DragStart = {
   y: number;
 };
 
-function facingIcon(vehicle: VehicleState) {
-  switch (vehicle.facing) {
-    case "left":
-      return "←";
-    case "right":
-      return "→";
-    case "up":
-      return "↑";
-    case "down":
-      return "↓";
-    default:
-      return "•";
+function directionLabel(vehicle: VehicleState, distance: number) {
+  if (vehicle.orientation === "horizontal") {
+    return distance > 0 ? "right" : "left";
   }
-}
 
-function forwardLabel(vehicle: VehicleState) {
-  switch (vehicle.facing) {
-    case "left":
-      return "left";
-    case "right":
-      return "right";
-    case "up":
-      return "up";
-    case "down":
-      return "down";
-    default:
-      return "forward";
-  }
+  return distance > 0 ? "down" : "up";
 }
 
 export function CarJam({
@@ -117,14 +95,6 @@ export function CarJam({
   }, [shakingVehicleId]);
 
   const selectedVehicle = gameState.vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
-
-  const surfaceFeedback = (message: string, tone: "info" | "warning" | "success", vehicleId?: string | null) => {
-    setFeedback(message);
-    setFeedbackTone(tone);
-    if (vehicleId) {
-      setShakingVehicleId(vehicleId);
-    }
-  };
 
   if (!level) {
     return (
@@ -182,15 +152,15 @@ export function CarJam({
     }
   };
 
-  const completeVictory = (moveCount: number) => {
-    const starsEarned = getStarRating(level, moveCount);
-    surfaceFeedback("Yay! The target car escaped.", "success");
-    onVictory({
-      levelId: level.levelId,
-      moveCount,
-      starsEarned,
-      nextLevelId: nextLevel?.nextLevelId ?? null,
-    });
+  const exitStyle = getExitStyle();
+  const starPreview = gameState.moveCount === 0 ? 3 : getStarRating(level, gameState.moveCount);
+
+  const surfaceFeedback = (message: string, tone: "info" | "warning" | "success", vehicleId?: string | null) => {
+    setFeedback(message);
+    setFeedbackTone(tone);
+    if (vehicleId) {
+      setShakingVehicleId(vehicleId);
+    }
   };
 
   const attemptMove = (move: MoveInput) => {
@@ -211,44 +181,21 @@ export function CarJam({
     setFeedback(null);
 
     if (result.hasWon) {
-      completeVictory(result.state.moveCount);
+      const starsEarned = getStarRating(level, result.state.moveCount);
+      surfaceFeedback("Yay! The target car escaped.", "success");
+      onVictory({
+        levelId: level.levelId,
+        moveCount: result.state.moveCount,
+        starsEarned,
+        nextLevelId: nextLevel?.nextLevelId ?? null,
+      });
       return;
     }
 
     surfaceFeedback(
-      `${vehicle.role === "target" ? "Target car" : "Vehicle"} moved ${Math.abs(move.distance)} ${Math.abs(move.distance) === 1 ? "step" : "steps"} ${forwardLabel(vehicle)}.`,
+      `${vehicle.role === "target" ? "Target car" : "Vehicle"} moved ${Math.abs(move.distance)} ${Math.abs(move.distance) === 1 ? "step" : "steps"} ${directionLabel(vehicle, move.distance)}.`,
       "info",
     );
-  };
-
-  const handleVehicleTap = (vehicle: VehicleState) => {
-    if (gameState.hasWon) {
-      return;
-    }
-
-    const escapeRoute = canVehicleEscape(gameState, vehicle.id);
-    setSelectedVehicleId(vehicle.id);
-
-    if (!escapeRoute) {
-      surfaceFeedback(`Facing ${forwardLabel(vehicle)}. Clear the lane and tap again to send it off.`, "info", vehicle.id);
-      return;
-    }
-
-    const result = escapeVehicle(gameState, vehicle.id);
-    if (!result.ok) {
-      surfaceFeedback(result.message, "warning", vehicle.id);
-      return;
-    }
-
-    setGameState(result.state);
-    setSelectedVehicleId(result.state.vehicles[0]?.id ?? null);
-
-    if (result.hasWon) {
-      completeVictory(result.state.moveCount);
-      return;
-    }
-
-    surfaceFeedback(`${vehicle.role === "target" ? "Target car" : "Vehicle"} drove ${forwardLabel(vehicle)} and left the board.`, "success");
   };
 
   const handleUndo = () => {
@@ -318,13 +265,16 @@ export function CarJam({
     }
 
     if (Math.abs(crossDelta) > Math.abs(primaryDelta)) {
-      surfaceFeedback(`This ride only drives forward ${forwardLabel(vehicle)}.`, "warning", vehicle.id);
+      surfaceFeedback(
+        vehicle.orientation === "horizontal" ? "This ride only slides left and right." : "This ride only slides up and down.",
+        "warning",
+        vehicle.id,
+      );
       return;
     }
 
-    const directionalDelta = vehicle.facing === "left" || vehicle.facing === "up" ? -primaryDelta : primaryDelta;
-    const rawDistance = Math.round(directionalDelta / cellSize);
-    const distance = Math.max(0, Math.min(Math.max(level.boardWidth, level.boardHeight), rawDistance));
+    const rawDistance = Math.round(primaryDelta / cellSize);
+    const distance = Math.max(-(level.boardWidth - 1), Math.min(level.boardWidth - 1, rawDistance));
 
     if (distance === 0) {
       return;
@@ -333,10 +283,12 @@ export function CarJam({
     attemptMove({ vehicleId: vehicle.id, distance });
   };
 
-  const exitStyle = getExitStyle();
-  const starPreview = gameState.moveCount === 0 ? 3 : getStarRating(level, gameState.moveCount);
-  const selectedVehicleCanAdvance = selectedVehicle ? validateMove(gameState, { vehicleId: selectedVehicle.id, distance: 1 }).ok : false;
-  const selectedVehicleCanEscape = selectedVehicle ? canVehicleEscape(gameState, selectedVehicle.id) !== null : false;
+  const movementButtons = [
+    { label: "←", distance: -1, axis: "horizontal" as const },
+    { label: "→", distance: 1, axis: "horizontal" as const },
+    { label: "↑", distance: -1, axis: "vertical" as const },
+    { label: "↓", distance: 1, axis: "vertical" as const },
+  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top,_rgba(52,211,153,0.24),_transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_55%,#111827_100%)] px-4 py-5 text-slate-100 sm:px-6">
@@ -387,7 +339,7 @@ export function CarJam({
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Garage lane</p>
-              <p className="mt-1 text-sm text-slate-300">Swipe a vehicle forward in its lane, or tap a free vehicle to let it drive away.</p>
+              <p className="mt-1 text-sm text-slate-300">Swipe a vehicle in its lane or tap arrows for one-step moves.</p>
             </div>
             <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100">
               {completionPercent}% through pack
@@ -412,7 +364,6 @@ export function CarJam({
                 const isSelected = vehicle.id === selectedVehicleId;
                 const colorClass = COLOR_CLASSES[level.vehicles.find((entry) => entry.id === vehicle.id)?.colorKey ?? "sun"] ?? COLOR_CLASSES.sun;
                 const validation = selectedVehicleId === vehicle.id ? validateMove(gameState, { vehicleId: vehicle.id, distance: 1 }) : null;
-                const escapeRoute = canVehicleEscape(gameState, vehicle.id);
 
                 return (
                   <button
@@ -424,7 +375,7 @@ export function CarJam({
                     onPointerCancel={() => {
                       delete dragStartRef.current[vehicle.id];
                     }}
-                    onClick={() => handleVehicleTap(vehicle)}
+                    onClick={() => setSelectedVehicleId(vehicle.id)}
                     className={[
                       "absolute rounded-[1.2rem] border text-left shadow-lg transition-all duration-200 ease-out",
                       "bg-gradient-to-br px-2 py-2",
@@ -445,8 +396,8 @@ export function CarJam({
                         {vehicle.role === "target" ? "Goal" : vehicle.role}
                       </span>
                       <span className="flex items-center justify-between text-[10px] font-semibold sm:text-xs">
-                        <span>{facingIcon(vehicle)} forward</span>
-                        <span>{escapeRoute ? "Run" : isSelected ? "Ready" : "Tap"}</span>
+                        <span>{vehicle.orientation === "horizontal" ? "↔" : "↕"}</span>
+                        <span>{isSelected ? "Ready" : "Tap"}</span>
                       </span>
                     </span>
                     {isSelected && (
@@ -469,7 +420,9 @@ export function CarJam({
                 <p className="text-sm font-semibold text-white">{selectedVehicle ? (selectedVehicle.role === "target" ? "Target car selected" : `${selectedVehicle.id} selected`) : "Pick a vehicle"}</p>
                 <p className="mt-1 text-sm text-slate-300">
                   {selectedVehicle
-                    ? `This one only moves forward ${forwardLabel(selectedVehicle)}.`
+                    ? selectedVehicle.orientation === "horizontal"
+                      ? "This one slides left and right."
+                      : "This one slides up and down."
                     : "Tap any vehicle to start moving it."}
                 </p>
               </div>
@@ -482,27 +435,26 @@ export function CarJam({
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-              <button
-                type="button"
-                disabled={!selectedVehicle || gameState.hasWon || !selectedVehicleCanAdvance}
-                onClick={() => selectedVehicle && attemptMove({ vehicleId: selectedVehicle.id, distance: 1 })}
-                className={[
-                  "rounded-2xl px-4 py-3 text-base font-bold transition",
-                  !selectedVehicle || gameState.hasWon || !selectedVehicleCanAdvance
-                    ? "cursor-not-allowed border border-white/10 bg-white/5 text-slate-500"
-                    : "border border-white/10 bg-slate-950/70 text-white hover:border-emerald-400/40 hover:bg-slate-950",
-                ].join(" ")}
-              >
-                {selectedVehicle ? `Move ${facingIcon(selectedVehicle)} forward` : "Select a vehicle"}
-              </button>
-              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-                {selectedVehicle
-                  ? selectedVehicleCanEscape
-                    ? "Lane clear: tap the vehicle to let it drive away."
-                    : "Blocked ahead: move something else first."
-                  : "Select a vehicle to see its lane status."}
-              </div>
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {movementButtons.map((button) => {
+                const disabled = !selectedVehicle || selectedVehicle.orientation !== button.axis || gameState.hasWon;
+                return (
+                  <button
+                    key={`${button.label}-${button.distance}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => selectedVehicle && attemptMove({ vehicleId: selectedVehicle.id, distance: button.distance })}
+                    className={[
+                      "rounded-2xl px-3 py-3 text-lg font-bold transition",
+                      disabled
+                        ? "cursor-not-allowed border border-white/10 bg-white/5 text-slate-500"
+                        : "border border-white/10 bg-slate-950/70 text-white hover:border-emerald-400/40 hover:bg-slate-950",
+                    ].join(" ")}
+                  >
+                    {button.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>

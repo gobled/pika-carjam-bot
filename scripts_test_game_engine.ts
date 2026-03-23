@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  canVehicleEscape,
   createGameState,
-  escapeVehicle,
   getHintSuggestion,
   isWinningState,
   moveVehicle,
@@ -27,10 +25,10 @@ function createSampleGame(overrides: Partial<CreateGameStateInput> = {}) {
     exit: { side: "right", row: 2 },
     targetVehicleId: "target",
     vehicles: [
-      { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right" },
-      { id: "truck", x: 4, y: 0, length: 3, orientation: "vertical", role: "truck", facing: "down" },
-      { id: "car-a", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car", facing: "left" },
-      { id: "car-b", x: 5, y: 3, length: 2, orientation: "vertical", role: "car", facing: "up" },
+      { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target" },
+      { id: "truck", x: 4, y: 0, length: 3, orientation: "vertical", role: "truck" },
+      { id: "car-a", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car" },
+      { id: "car-b", x: 5, y: 3, length: 2, orientation: "vertical", role: "car" },
     ],
     ...overrides,
   });
@@ -46,7 +44,7 @@ function runTest(name: string, testFn: () => void) {
   }
 }
 
-runTest("allows valid forward moves and increments move history", () => {
+runTest("allows valid moves and increments move history", () => {
   const state = createSampleGame();
   const result = moveVehicle(state, { vehicleId: "truck", distance: 1 });
 
@@ -62,14 +60,13 @@ runTest("allows valid forward moves and increments move history", () => {
     length: 3,
     orientation: "vertical",
     role: "truck",
-    facing: "down",
   });
   assert.equal(result.state.moveCount, 1);
   assert.equal(result.state.history.length, 1);
   assert.equal(result.hasWon, false);
 });
 
-runTest("rejects blocked forward moves with a structured reason", () => {
+runTest("rejects blocked moves with a structured reason", () => {
   const state = createSampleGame();
   const validation = validateMove(state, { vehicleId: "target", distance: 2 });
 
@@ -82,7 +79,7 @@ runTest("rejects blocked forward moves with a structured reason", () => {
   });
 });
 
-runTest("rejects backward moves", () => {
+runTest("rejects out-of-bounds moves", () => {
   const state = createSampleGame();
   const result = moveVehicle(state, { vehicleId: "car-a", distance: -1 });
 
@@ -91,8 +88,16 @@ runTest("rejects backward moves", () => {
     return;
   }
 
-  assert.equal(result.reason, "wrong_direction");
-  assert.equal(result.message, "Vehicle car-a can only move forward.");
+  assert.equal(result.reason, "out_of_bounds");
+  assert.deepEqual(result.attemptedPosition, { x: -1, y: 0 });
+  assert.deepEqual(state.vehicles.find((vehicle) => vehicle.id === "car-a"), {
+    id: "car-a",
+    x: 0,
+    y: 0,
+    length: 2,
+    orientation: "horizontal",
+    role: "car",
+  });
 });
 
 runTest("prevents overlapping vehicles during game creation", () => {
@@ -100,25 +105,24 @@ runTest("prevents overlapping vehicles during game creation", () => {
     () =>
       createSampleGame({
         vehicles: [
-          { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right" },
-          { id: "overlap", x: 2, y: 2, length: 2, orientation: "vertical", role: "car", facing: "up" },
+          { id: "target", x: 1, y: 2, length: 2, orientation: "horizontal", role: "target" },
+          { id: "overlap", x: 2, y: 2, length: 2, orientation: "vertical", role: "car" },
         ],
       }),
     /overlaps vehicle target/,
   );
 });
 
-runTest("lets the target escape through the exit when its lane is clear", () => {
+runTest("detects the win condition when the target reaches the exit edge", () => {
   const state = createSampleGame({
     vehicles: [
-      { id: "target", x: 3, y: 2, length: 2, orientation: "horizontal", role: "target", facing: "right" },
-      { id: "support", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car", facing: "left" },
+      { id: "target", x: 3, y: 2, length: 2, orientation: "horizontal", role: "target" },
+      { id: "support", x: 0, y: 0, length: 2, orientation: "horizontal", role: "car" },
     ],
   });
 
-  assert.ok(canVehicleEscape(state, "target"));
+  const result = moveVehicle(state, { vehicleId: "target", distance: 1 });
 
-  const result = escapeVehicle(state, "target");
   assert.equal(result.ok, true);
   if (!result.ok) {
     return;
@@ -127,7 +131,6 @@ runTest("lets the target escape through the exit when its lane is clear", () => 
   assert.equal(result.hasWon, true);
   assert.equal(isWinningState(result.state), true);
   assert.equal(result.state.hasWon, true);
-  assert.equal(result.state.vehicles.some((vehicle) => vehicle.id === "target"), false);
 });
 
 runTest("supports undo and reset behavior deterministically", () => {
@@ -158,7 +161,6 @@ runTest("supports undo and reset behavior deterministically", () => {
     length: 2,
     orientation: "horizontal",
     role: "target",
-    facing: "right",
   });
 
   const resetState = resetGame(undoResult.state);
@@ -184,6 +186,7 @@ runTest("exposes a hint provider placeholder interface", () => {
 });
 
 console.log("All deterministic puzzle engine checks passed.");
+
 
 runTest("validates every launch level schema", () => {
   assert.equal(LAUNCH_LEVEL_PACK.levels.length, 10);
