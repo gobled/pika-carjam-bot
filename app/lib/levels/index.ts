@@ -1,5 +1,5 @@
-import { createGameState } from "../game";
-import type { GameState } from "../game";
+import { createColorMatchState, createGameState } from "../game";
+import type { ColorMatchState, GameState } from "../game";
 import { LAUNCH_LEVEL_PACK } from "./content";
 import { assertValidLevel, validateLevelDefinition } from "./schema";
 import { solveLevel } from "./solver";
@@ -17,6 +17,7 @@ export function getAllLevels(): LevelDefinition[] {
   return VALIDATED_LEVELS.map((level) => ({
     ...level,
     exit: { ...level.exit },
+    passengerQueue: [...level.passengerQueue],
     vehicles: level.vehicles.map((vehicle) => ({ ...vehicle })),
     starThresholds: { ...level.starThresholds },
     hintMetadata: {
@@ -39,8 +40,10 @@ export function getLevelSummaries(): LevelSummary[] {
     boardWidth: level.boardWidth,
     boardHeight: level.boardHeight,
     themeId: level.themeId,
+    dockSlots: level.dockSlots,
     starThresholds: { ...level.starThresholds },
     vehicleCount: level.vehicles.length,
+    passengerCount: level.passengerQueue.length,
   }));
 }
 
@@ -72,6 +75,18 @@ export function createGameStateFromLevel(levelId: string): GameState {
     exit: level.exit,
     targetVehicleId: level.targetVehicleId,
     vehicles: level.vehicles.map(toGameVehicleState),
+  });
+}
+
+export function createColorMatchStateFromLevel(levelId: string): ColorMatchState {
+  const level = getLevelById(levelId);
+  if (!level) {
+    throw new Error(`Unknown level ${levelId}.`);
+  }
+
+  return createColorMatchState({
+    passengerQueue: level.passengerQueue,
+    dockSlots: level.dockSlots,
   });
 }
 

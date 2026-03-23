@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createGameStateFromLevel, getLevelById, getNextLevelMetadata, getStarRating } from "@/app/lib/levels";
-import { canVehicleEscape, escapeVehicle, getHintSuggestion, moveVehicle, resetGame, undoMove, validateMove } from "@/app/lib/game";
-import type { MoveInput, VehicleState } from "@/app/lib/game";
+import { createColorMatchStateFromLevel, createGameStateFromLevel, getLevelById, getNextLevelMetadata, getStarRating } from "@/app/lib/levels";
+import { canVehicleEscape, escapeVehicle, getHintSuggestion, moveVehicle, resetGame, resolveEscapedVehicle, undoMove, validateMove } from "@/app/lib/game";
+import type { ColorMatchState, MoveInput, VehicleState } from "@/app/lib/game";
 import type { TelegramSession } from "@/app/lib/telegram";
+
+const COLOR_LABELS: Record<string, string> = {
+  sun: "Amber",
+  mint: "Mint",
+  berry: "Berry",
+  ocean: "Ocean",
+  gold: "Gold",
+  plum: "Plum",
+  coral: "Coral",
+};
 
 const COLOR_CLASSES: Record<string, string> = {
   sun: "from-amber-300 to-orange-400 text-orange-950",
@@ -318,6 +328,7 @@ export function CarJam({
 }: CarJamProps) {
   const level = useMemo(() => getLevelById(levelId), [levelId]);
   const [gameState, setGameState] = useState(() => createGameStateFromLevel(levelId));
+  const [jamState, setJamState] = useState(() => createColorMatchStateFromLevel(levelId));
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"info" | "warning" | "success">("info");
@@ -326,11 +337,15 @@ export function CarJam({
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<Record<string, DragStart>>({});
   const departureTimeoutRef = useRef<number | null>(null);
+  const jamHistoryRef = useRef<ColorMatchState[]>([createColorMatchStateFromLevel(levelId)]);
 
   useEffect(() => {
     const nextState = createGameStateFromLevel(levelId);
+    const nextJamState = createColorMatchStateFromLevel(levelId);
     setGameState(nextState);
-    setSelectedVehicleId(nextState.targetVehicleId);
+    setJamState(nextJamState);
+    jamHistoryRef.current = [nextJamState];
+    setSelectedVehicleId(nextState.vehicles[0]?.id ?? null);
     setFeedback(null);
     setShakingVehicleId(null);
     setDepartingVehicle(null);
@@ -350,16 +365,16 @@ export function CarJam({
 
   useEffect(() => {
     if (!selectedVehicleId && gameState.vehicles.length) {
-      setSelectedVehicleId(gameState.targetVehicleId);
+      setSelectedVehicleId(gameState.vehicles[0]?.id ?? null);
     }
-  }, [gameState.targetVehicleId, gameState.vehicles.length, selectedVehicleId]);
+  }, [gameState.vehicles, selectedVehicleId]);
 
   useEffect(() => {
     if (!feedback) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => setFeedback(null), 1800);
+    const timeoutId = window.setTimeout(() => setFeedback(null), 2200);
     return () => window.clearTimeout(timeoutId);
   }, [feedback]);
 
@@ -375,6 +390,10 @@ export function CarJam({
   const getLevelVehicle = (vehicleId: string) => level?.vehicles.find((entry) => entry.id === vehicleId);
   const controlsLocked = Boolean(departingVehicle);
   const selectedVehicle = gameState.vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const selectedLevelVehicle = selectedVehicle ? getLevelVehicle(selectedVehicle.id) : null;
+  const selectedVehicleColor = selectedLevelVehicle?.colorKey ?? null;
+  const nextPassengerColor = jamState.passengerQueue[0] ?? null;
+  const hasFailed = jamState.isFailed;
 
   const surfaceFeedback = (message: string, tone: "info" | "warning" | "success", vehicleId?: string | null) => {
     setFeedback(message);
@@ -382,6 +401,11 @@ export function CarJam({
     if (vehicleId) {
       setShakingVehicleId(vehicleId);
     }
+  };
+
+  const pushJamHistory = (nextState: ColorMatchState) => {
+    jamHistoryRef.current = [...jamHistoryRef.current, nextState];
+    setJamState(nextState);
   };
 
   if (!level) {
@@ -442,7 +466,7 @@ export function CarJam({
 
   const completeVictory = (moveCount: number) => {
     const starsEarned = getStarRating(level, moveCount);
-    surfaceFeedback("Yay! The target car escaped.", "success");
+    surfaceFeedback("Nice! Every waiting passenger has a matching ride.", "success");
     onVictory({
       levelId: level.levelId,
       moveCount,
@@ -453,7 +477,7 @@ export function CarJam({
 
   const attemptMove = (move: MoveInput) => {
     const vehicle = gameState.vehicles.find((entry) => entry.id === move.vehicleId);
-    if (!vehicle || gameState.hasWon || controlsLocked) {
+    if (!vehicle || controlsLocked || hasFailed || jamState.isComplete) {
       return;
     }
 
@@ -466,21 +490,17 @@ export function CarJam({
     }
 
     setGameState(result.state);
+    pushJamHistory(jamState);
     setFeedback(null);
 
-    if (result.hasWon) {
-      completeVictory(result.state.moveCount);
-      return;
-    }
-
     surfaceFeedback(
-      `${vehicle.role === "target" ? "Target car" : "Vehicle"} moved ${Math.abs(move.distance)} ${Math.abs(move.distance) === 1 ? "step" : "steps"} ${forwardLabel(vehicle)}.`,
+      `${COLOR_LABELS[getLevelVehicle(vehicle.id)?.colorKey ?? "sun"] ?? "Car"} ride moved ${Math.abs(move.distance)} ${Math.abs(move.distance) === 1 ? "step" : "steps"} ${forwardLabel(vehicle)}.`,
       "info",
     );
   };
 
   const handleVehicleTap = (vehicle: VehicleState) => {
-    if (gameState.hasWon || controlsLocked) {
+    if (controlsLocked || hasFailed || jamState.isComplete) {
       return;
     }
 
@@ -488,35 +508,58 @@ export function CarJam({
     setSelectedVehicleId(vehicle.id);
 
     if (!escapeRoute) {
-      surfaceFeedback(`Facing ${forwardLabel(vehicle)}. Clear the lane and tap again to send it off.`, "info", vehicle.id);
+      surfaceFeedback(`Facing ${forwardLabel(vehicle)}. Unblock the lane before sending this ride out.`, "info", vehicle.id);
       return;
     }
 
+    const levelVehicle = getLevelVehicle(vehicle.id);
+    const colorKey = levelVehicle?.colorKey ?? "sun";
     const result = escapeVehicle(gameState, vehicle.id);
     if (!result.ok) {
       surfaceFeedback(result.message, "warning", vehicle.id);
       return;
     }
 
-    const levelVehicle = getLevelVehicle(vehicle.id);
+    const jamResolution = resolveEscapedVehicle(jamState, { vehicleId: vehicle.id, colorKey });
+
     setDepartingVehicle({
       vehicle,
-      colorKey: levelVehicle?.colorKey ?? "sun",
+      colorKey,
       skinKey: resolveSkinKey(vehicle, levelVehicle?.skinKey),
     });
 
     departureTimeoutRef.current = window.setTimeout(() => {
       setGameState(result.state);
+      pushJamHistory(jamResolution.state);
       setDepartingVehicle(null);
       setSelectedVehicleId(result.state.vehicles[0]?.id ?? null);
       departureTimeoutRef.current = null;
 
-      if (result.hasWon) {
+      if (jamResolution.state.isFailed) {
+        surfaceFeedback(`Dock jam! No slot was free for the ${COLOR_LABELS[colorKey] ?? colorKey.toUpperCase()} ride. Undo or restart to recover.`, "warning", vehicle.id);
+        return;
+      }
+
+      if (jamResolution.state.isComplete) {
         completeVictory(result.state.moveCount);
         return;
       }
 
-      surfaceFeedback(`${vehicle.role === "target" ? "Target car" : "Vehicle"} drove ${forwardLabel(vehicle)} and left the board.`, "success");
+      if (jamResolution.outcome === "matched") {
+        const autoDockCount = jamResolution.autoDispatchedFromDock.length;
+        surfaceFeedback(
+          autoDockCount > 0
+            ? `${COLOR_LABELS[colorKey] ?? colorKey} matched the next passenger, and ${autoDockCount} docked ride${autoDockCount === 1 ? "" : "s"} auto-boarded too.`
+            : `${COLOR_LABELS[colorKey] ?? colorKey} matched the next passenger and left the lot.`,
+          "success",
+        );
+        return;
+      }
+
+      surfaceFeedback(
+        `${COLOR_LABELS[colorKey] ?? colorKey} did not match the next passenger, so it moved into the dock.`,
+        "info",
+      );
     }, DEPART_ANIMATION_MS);
   };
 
@@ -531,9 +574,12 @@ export function CarJam({
       return;
     }
 
+    jamHistoryRef.current = jamHistoryRef.current.slice(0, -1);
+    const previousJamState = jamHistoryRef.current[jamHistoryRef.current.length - 1] ?? createColorMatchStateFromLevel(levelId);
+    setJamState(previousJamState);
     setGameState(result.state);
     setSelectedVehicleId(result.undoneMove.vehicleId);
-    surfaceFeedback("Undid the last move.", "info");
+    surfaceFeedback(hasFailed ? "Undo cleared the dock jam." : "Undid the last action.", "info");
   };
 
   const handleReset = () => {
@@ -541,10 +587,13 @@ export function CarJam({
       return;
     }
 
+    const nextJamState = createColorMatchStateFromLevel(levelId);
     setGameState((current) => resetGame(current));
-    setSelectedVehicleId(level.targetVehicleId);
+    setJamState(nextJamState);
+    jamHistoryRef.current = [nextJamState];
+    setSelectedVehicleId(level.vehicles[0]?.id ?? null);
     setDepartingVehicle(null);
-    surfaceFeedback("Board reset. Try a new plan!", "info");
+    surfaceFeedback("Level reset. Rebuild the passenger queue from the start.", "info");
   };
 
   const handleHint = () => {
@@ -574,7 +623,7 @@ export function CarJam({
   };
 
   const handlePointerDown = (vehicleId: string, event: React.PointerEvent<HTMLButtonElement>) => {
-    if (controlsLocked) {
+    if (controlsLocked || hasFailed) {
       return;
     }
 
@@ -583,7 +632,7 @@ export function CarJam({
   };
 
   const handlePointerUp = (vehicle: VehicleState, event: React.PointerEvent<HTMLButtonElement>) => {
-    if (controlsLocked) {
+    if (controlsLocked || hasFailed) {
       return;
     }
 
@@ -627,6 +676,7 @@ export function CarJam({
   const starPreview = gameState.moveCount === 0 ? 3 : getStarRating(level, gameState.moveCount);
   const selectedVehicleCanAdvance = selectedVehicle ? validateMove(gameState, { vehicleId: selectedVehicle.id, distance: 1 }).ok : false;
   const selectedVehicleCanEscape = selectedVehicle ? canVehicleEscape(gameState, selectedVehicle.id) !== null : false;
+  const selectedVehicleMatchesQueue = Boolean(selectedVehicleColor && nextPassengerColor && selectedVehicleColor === nextPassengerColor);
   const visibleVehicles = departingVehicle ? gameState.vehicles.filter((vehicle) => vehicle.id !== departingVehicle.vehicle.id) : gameState.vehicles;
 
   return (
@@ -642,7 +692,7 @@ export function CarJam({
               ← Map
             </button>
             <div className="text-center">
-              <p className="text-xs uppercase tracking-[0.32em] text-emerald-300">Playable slice</p>
+              <p className="text-xs uppercase tracking-[0.32em] text-emerald-300">Car Jam Color mode</p>
               <h1 className="text-lg font-bold text-white">{level.levelId.replace("tutorial-", "Level ")}</h1>
             </div>
             <button
@@ -664,8 +714,8 @@ export function CarJam({
               <p className="mt-1 text-lg font-bold text-white">{starPreview > 0 ? "⭐".repeat(starPreview) : "—"}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-              <p className="text-slate-400">Mode</p>
-              <p className="mt-1 text-sm font-semibold text-white">{soundEnabled ? "Sound on" : "Quiet"}</p>
+              <p className="text-slate-400">Dock</p>
+              <p className="mt-1 text-sm font-semibold text-white">{jamState.dockedVehicles.length}/{level.dockSlots}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
               <p className="text-slate-400">App</p>
@@ -675,17 +725,81 @@ export function CarJam({
         </header>
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-900/75 p-4 shadow-2xl shadow-black/30 backdrop-blur">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Garage lane</p>
-              <p className="mt-1 text-sm text-slate-300">Swipe a vehicle forward in its lane, or tap a free vehicle to let it drive away.</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-300">Passenger queue</p>
+              <p className="mt-1 text-sm text-slate-300">Send out a matching color to board the next rider. Wrong colors wait in the dock until their turn comes up.</p>
             </div>
             <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100">
               {completionPercent}% through pack
             </div>
           </div>
 
-          <div className="relative mx-auto aspect-square w-full max-w-[24rem] rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,#18212f_0%,#0f172a_100%)] p-3 shadow-inner shadow-black/40">
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-white">Next riders</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{jamState.passengerQueue.length} waiting</p>
+            </div>
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {jamState.passengerQueue.length ? jamState.passengerQueue.map((colorKey, index) => (
+                <div
+                  key={`${colorKey}-${index}`}
+                  className={[
+                    "flex min-w-[4.75rem] shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold shadow-sm",
+                    COLOR_CLASSES[colorKey] ?? COLOR_CLASSES.sun,
+                    index === 0 ? "border-white/70 ring-2 ring-white/15" : "border-white/10",
+                  ].join(" ")}
+                >
+                  <span className="text-lg">🧍</span>
+                  <span>{COLOR_LABELS[colorKey] ?? colorKey}</span>
+                </div>
+              )) : (
+                <div className="w-full rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-50">
+                  Everyone found a ride. Great routing!
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">Dock</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{jamState.dockedVehicles.length}/{level.dockSlots} used</p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {Array.from({ length: level.dockSlots }, (_, index) => {
+                  const dockedVehicle = jamState.dockedVehicles[index];
+                  const colorKey = dockedVehicle?.colorKey ?? "slate";
+                  return (
+                    <div
+                      key={`dock-slot-${index}`}
+                      className={[
+                        "rounded-2xl border px-3 py-3 text-sm",
+                        dockedVehicle
+                          ? `${COLOR_CLASSES[dockedVehicle.colorKey] ?? COLOR_CLASSES.sun} border-white/10`
+                          : "border-dashed border-white/15 bg-slate-950/50 text-slate-500",
+                      ].join(" ")}
+                    >
+                      <p className="font-semibold">{dockedVehicle ? `${COLOR_LABELS[colorKey] ?? colorKey} ride` : "Empty slot"}</p>
+                      <p className="mt-1 text-xs text-current/80">{dockedVehicle ? dockedVehicle.vehicleId : "Use only when the next rider is a different color."}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-3 text-sm text-slate-300 sm:w-[11rem]">
+              <p className="font-semibold text-white">Quick rules</p>
+              <ul className="mt-2 space-y-2 text-sm/5">
+                <li>• Swipe cars only in their forward direction.</li>
+                <li>• Tap a free car to send it out of the lot.</li>
+                <li>• Matching color boards instantly; wrong color uses a dock slot.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="relative mx-auto mt-4 aspect-square w-full max-w-[24rem] rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,#18212f_0%,#0f172a_100%)] p-3 shadow-inner shadow-black/40">
             <div
               ref={boardRef}
               className="relative h-full w-full overflow-hidden rounded-[1.35rem] border border-white/10 bg-slate-950/85"
@@ -748,10 +862,18 @@ export function CarJam({
           <div className="mt-4 rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-white">{selectedVehicle ? (selectedVehicle.role === "target" ? "Target car selected" : `${selectedVehicle.id} selected`) : "Pick a vehicle"}</p>
+                <p className="text-sm font-semibold text-white">
+                  {selectedVehicle
+                    ? `${COLOR_LABELS[selectedVehicleColor ?? "sun"] ?? "Selected"} ${selectedVehicle.role === "truck" ? "bus" : "ride"}`
+                    : "Pick a vehicle"}
+                </p>
                 <p className="mt-1 text-sm text-slate-300">
                   {selectedVehicle
-                    ? `This one only moves forward ${forwardLabel(selectedVehicle)}.`
+                    ? selectedVehicleMatchesQueue
+                      ? "Perfect match: if the lane is clear, tapping it boards the next passenger."
+                      : nextPassengerColor
+                        ? `Next rider wants ${COLOR_LABELS[nextPassengerColor] ?? nextPassengerColor}. A wrong-color escape will use a dock slot.`
+                        : "No passengers left in line."
                     : "Tap any vehicle to start moving it."}
                 </p>
               </div>
@@ -768,11 +890,11 @@ export function CarJam({
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
               <button
                 type="button"
-                disabled={!selectedVehicle || gameState.hasWon || !selectedVehicleCanAdvance || controlsLocked}
+                disabled={!selectedVehicle || !selectedVehicleCanAdvance || controlsLocked || hasFailed}
                 onClick={() => selectedVehicle && attemptMove({ vehicleId: selectedVehicle.id, distance: 1 })}
                 className={[
                   "rounded-2xl px-4 py-3 text-base font-bold transition",
-                  !selectedVehicle || gameState.hasWon || !selectedVehicleCanAdvance || controlsLocked
+                  !selectedVehicle || !selectedVehicleCanAdvance || controlsLocked || hasFailed
                     ? "cursor-not-allowed border border-white/10 bg-white/5 text-slate-500"
                     : "border border-white/10 bg-slate-950/70 text-white hover:border-emerald-400/40 hover:bg-slate-950",
                 ].join(" ")}
@@ -781,12 +903,16 @@ export function CarJam({
               </button>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
                 {controlsLocked
-                  ? "A car is sliding out right now..."
-                  : selectedVehicle
-                    ? selectedVehicleCanEscape
-                      ? "Lane clear: tap the vehicle to let it drive away."
-                      : "Blocked ahead: move something else first."
-                    : "Select a vehicle to see its lane status."}
+                  ? "A ride is leaving the lot..."
+                  : hasFailed
+                    ? "Dock full. Undo or restart before sending out anything else."
+                    : selectedVehicle
+                      ? selectedVehicleCanEscape
+                        ? selectedVehicleMatchesQueue
+                          ? "Lane clear: tap to board the next passenger."
+                          : "Lane clear: tap sends it to the dock unless the queue changes first."
+                        : "Blocked ahead: move something else first."
+                      : "Select a vehicle to see its lane status."}
               </div>
             </div>
           </div>
@@ -829,7 +955,7 @@ export function CarJam({
           ].join(" ")}
         >
           <p className="font-semibold">
-            {feedbackTone === "warning" ? "Try again" : feedbackTone === "success" ? "Great job" : "Driver tip"}
+            {feedbackTone === "warning" ? "Traffic alert" : feedbackTone === "success" ? "Boarding complete" : "Driver tip"}
           </p>
           <p className="mt-1 text-sm/6 text-current/90">{feedback ?? level.hintMetadata.summary}</p>
         </div>

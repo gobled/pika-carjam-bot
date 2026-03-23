@@ -1,13 +1,26 @@
-import { canVehicleEscape, createGameState, escapeVehicle, moveVehicle, validateMove } from "../game";
-import type { GameState, MoveInput } from "../game";
+import {
+  canVehicleEscape,
+  createColorMatchState,
+  createGameState,
+  escapeVehicle,
+  moveVehicle,
+  resolveEscapedVehicle,
+  serializeColorMatchState,
+  validateMove,
+} from "../game";
+import type { ColorMatchState, GameState, MoveInput } from "../game";
 import type { LevelDefinition, SolvedLevelResult } from "./types";
 import { toGameVehicleState } from "./types";
 
-function serializeState(state: GameState) {
+function serializeBoardState(state: GameState) {
   return state.vehicles
     .map((vehicle) => `${vehicle.id}:${vehicle.x},${vehicle.y}`)
     .sort()
     .join("|");
+}
+
+function serializeCombinedState(boardState: GameState, colorState: ColorMatchState) {
+  return `${serializeBoardState(boardState)}||${serializeColorMatchState(colorState)}`;
 }
 
 function enumerateMoves(state: GameState): Array<MoveInput | { vehicleId: string; escape: true }> {
@@ -34,23 +47,28 @@ function enumerateMoves(state: GameState): Array<MoveInput | { vehicleId: string
 }
 
 export function solveLevel(level: LevelDefinition): SolvedLevelResult | null {
-  const start = createGameState({
+  const startBoardState = createGameState({
     board: { width: level.boardWidth, height: level.boardHeight },
     exit: level.exit,
     targetVehicleId: level.targetVehicleId,
     vehicles: level.vehicles.map(toGameVehicleState),
   });
+  const startColorState = createColorMatchState({
+    passengerQueue: level.passengerQueue,
+    dockSlots: level.dockSlots,
+  });
 
-  const visited = new Set<string>([serializeState(start)]);
+  const visited = new Set<string>([serializeCombinedState(startBoardState, startColorState)]);
   const queue: Array<{
-    state: GameState;
+    boardState: GameState;
+    colorState: ColorMatchState;
     moves: Array<{ vehicleId: string; distance: number }>;
-  }> = [{ state: start, moves: [] }];
+  }> = [{ boardState: startBoardState, colorState: startColorState, moves: [] }];
 
   for (let index = 0; index < queue.length; index += 1) {
     const current = queue[index];
 
-    if (current.state.hasWon) {
+    if (current.colorState.isComplete) {
       return {
         levelId: level.levelId,
         minimumMoves: current.moves.length,
@@ -58,21 +76,60 @@ export function solveLevel(level: LevelDefinition): SolvedLevelResult | null {
       };
     }
 
-    for (const move of enumerateMoves(current.state)) {
-      const result = "escape" in move ? escapeVehicle(current.state, move.vehicleId) : moveVehicle(current.state, move);
-      if (!result.ok) {
+    if (current.colorState.isFailed) {
+      continue;
+    }
+
+    for (const move of enumerateMoves(current.boardState)) {
+      if ("escape" in move) {
+        const vehicle = level.vehicles.find((entry) => entry.id === move.vehicleId);
+        if (!vehicle?.colorKey) {
+          continue;
+        }
+
+        const boardResult = escapeVehicle(current.boardState, move.vehicleId);
+        if (!boardResult.ok) {
+          continue;
+        }
+
+        const colorResult = resolveEscapedVehicle(current.colorState, {
+          vehicleId: move.vehicleId,
+          colorKey: vehicle.colorKey,
+        });
+
+        if (colorResult.state.isFailed) {
+          continue;
+        }
+
+        const key = serializeCombinedState(boardResult.state, colorResult.state);
+        if (visited.has(key)) {
+          continue;
+        }
+
+        visited.add(key);
+        queue.push({
+          boardState: boardResult.state,
+          colorState: colorResult.state,
+          moves: [...current.moves, { vehicleId: move.vehicleId, distance: boardResult.move.distance }],
+        });
         continue;
       }
 
-      const key = serializeState(result.state);
+      const boardResult = moveVehicle(current.boardState, move);
+      if (!boardResult.ok) {
+        continue;
+      }
+
+      const key = serializeCombinedState(boardResult.state, current.colorState);
       if (visited.has(key)) {
         continue;
       }
 
       visited.add(key);
       queue.push({
-        state: result.state,
-        moves: [...current.moves, { vehicleId: move.vehicleId, distance: "escape" in move ? result.move.distance : move.distance }],
+        boardState: boardResult.state,
+        colorState: current.colorState,
+        moves: [...current.moves, { vehicleId: move.vehicleId, distance: move.distance }],
       });
     }
   }
