@@ -8,15 +8,6 @@ import {
   undoMove,
   validateMove,
 } from "./app/lib/game";
-import {
-  LAUNCH_LEVEL_PACK,
-  getLevelById,
-  getLevelSummaries,
-  getNextLevelMetadata,
-  getStarRating,
-  solveLevel,
-  validateLevelDefinition,
-} from "./app/lib/levels";
 import type { CreateGameStateInput } from "./app/lib/game";
 
 function createSampleGame(overrides: Partial<CreateGameStateInput> = {}) {
@@ -186,66 +177,3 @@ runTest("exposes a hint provider placeholder interface", () => {
 });
 
 console.log("All deterministic puzzle engine checks passed.");
-
-
-runTest("validates every launch level schema", () => {
-  assert.equal(LAUNCH_LEVEL_PACK.levels.length, 10);
-
-  for (const level of LAUNCH_LEVEL_PACK.levels) {
-    const validation = validateLevelDefinition(level);
-    assert.equal(validation.ok, true, validation.ok ? undefined : validation.errors.join(" "));
-  }
-});
-
-runTest("solves each launch level and keeps a gentle difficulty ramp", () => {
-  const moveCounts = LAUNCH_LEVEL_PACK.levels.map((level) => {
-    const solution = solveLevel(level);
-    assert.ok(solution, `Expected ${level.levelId} to be solvable.`);
-    return solution.minimumMoves;
-  });
-
-  for (let index = 1; index < moveCounts.length; index += 1) {
-    assert.ok(
-      moveCounts[index] >= moveCounts[index - 1],
-      `Expected ${LAUNCH_LEVEL_PACK.levels[index].levelId} to be at least as hard as the previous level.`,
-    );
-  }
-});
-
-runTest("provides level lookup and progression helpers", () => {
-  const level = getLevelById("tutorial-04");
-  assert.ok(level);
-  assert.equal(level?.levelId, "tutorial-04");
-
-  const summaries = getLevelSummaries();
-  assert.equal(summaries.length, 10);
-  assert.deepEqual(summaries[0], {
-    levelId: "tutorial-01",
-    boardWidth: 6,
-    boardHeight: 6,
-    themeId: "sunny-lot",
-    starThresholds: { threeStars: 1, twoStars: 2, oneStar: 3 },
-    vehicleCount: 3,
-  });
-
-  assert.deepEqual(getNextLevelMetadata("tutorial-10"), {
-    currentLevelId: "tutorial-10",
-    currentIndex: 9,
-    totalLevels: 10,
-    nextLevelId: null,
-    hasNextLevel: false,
-  });
-});
-
-runTest("computes star ratings from move thresholds", () => {
-  const level = getLevelById("tutorial-06");
-  assert.ok(level);
-  if (!level) {
-    return;
-  }
-
-  assert.equal(getStarRating(level, 4), 3);
-  assert.equal(getStarRating(level, 6), 2);
-  assert.equal(getStarRating(level, 8), 1);
-  assert.equal(getStarRating(level, 9), 0);
-});

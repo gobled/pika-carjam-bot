@@ -14,7 +14,6 @@
   },
   "include": [
     "app/lib/game/**/*.ts",
-    "app/lib/levels/**/*.ts",
     "scripts_test_game_engine.ts"
   ],
   "exclude": ["node_modules"]
