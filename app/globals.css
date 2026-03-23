@@ -94,3 +94,24 @@ canvas {
   50% { transform: translateX(4px); }
   75% { transform: translateX(-3px); }
 }
+
+
+@keyframes drive-away-right {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  100% { transform: translate3d(150%, 0, 0) scale(0.92); opacity: 0; }
+}
+
+@keyframes drive-away-left {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  100% { transform: translate3d(-150%, 0, 0) scale(0.92); opacity: 0; }
+}
+
+@keyframes drive-away-up {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  100% { transform: translate3d(0, -150%, 0) scale(0.92); opacity: 0; }
+}
+
+@keyframes drive-away-down {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  100% { transform: translate3d(0, 150%, 0) scale(0.92); opacity: 0; }
+}
