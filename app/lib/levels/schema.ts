@@ -1,4 +1,4 @@
-import { createGameState, validateMove } from "../game";
+import { createColorMatchState, createGameState, validateMove } from "../game";
 import type { LevelDefinition, LevelValidationResult } from "./types";
 import { toGameVehicleState } from "./types";
 
@@ -22,6 +22,10 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
   pushIntegerError(errors, "boardWidth", level.boardWidth, 1);
   pushIntegerError(errors, "boardHeight", level.boardHeight, 1);
 
+  if (!isNonEmptyString(level.targetVehicleId)) {
+    errors.push("targetVehicleId must be a non-empty string.");
+  }
+
   if (!isNonEmptyString(level.themeId)) {
     errors.push("themeId must be a non-empty string.");
   }
@@ -31,8 +35,7 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
   }
 
   const vehicleIds = new Set<string>();
-  let totalOpenSeats = 0;
-
+  const vehicleColorCounts = new Map<string, number>();
   for (const vehicle of level.vehicles) {
     if (!isNonEmptyString(vehicle.id)) {
       errors.push("Each vehicle must have a non-empty id.");
@@ -47,32 +50,45 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
     pushIntegerError(errors, `Vehicle ${vehicle.id} x`, vehicle.x, 0);
     pushIntegerError(errors, `Vehicle ${vehicle.id} y`, vehicle.y, 0);
     pushIntegerError(errors, `Vehicle ${vehicle.id} length`, vehicle.length, 2);
-    pushIntegerError(errors, `Vehicle ${vehicle.id} capacity`, vehicle.capacity, 1);
-    pushIntegerError(errors, `Vehicle ${vehicle.id} occupancy`, vehicle.occupancy ?? 0, 0);
 
-    if ((vehicle.occupancy ?? 0) > vehicle.capacity) {
-      errors.push(`Vehicle ${vehicle.id} cannot start over capacity.`);
+    const validFacing = vehicle.orientation === "horizontal"
+      ? vehicle.facing === "left" || vehicle.facing === "right"
+      : vehicle.facing === "up" || vehicle.facing === "down";
+
+    if (!validFacing) {
+      errors.push(`Vehicle ${vehicle.id} must face along its movement axis.`);
     }
 
-    if (!isNonEmptyString(vehicle.colorKey)) {
-      errors.push(`Vehicle ${vehicle.id} must define a colorKey.`);
+    if (!vehicle.colorKey && !vehicle.skinKey) {
+      errors.push(`Vehicle ${vehicle.id} must define either colorKey or skinKey.`);
     }
 
-    totalOpenSeats += vehicle.capacity - (vehicle.occupancy ?? 0);
+    if (vehicle.colorKey) {
+      vehicleColorCounts.set(vehicle.colorKey, (vehicleColorCounts.get(vehicle.colorKey) ?? 0) + 1);
+    }
   }
 
-  if (!Array.isArray(level.passengerQueue) || level.passengerQueue.length < 1) {
-    errors.push("passengerQueue must be a non-empty array.");
+  pushIntegerError(errors, "dockSlots", level.dockSlots, 1);
+
+  if (!Array.isArray(level.passengerQueue) || level.passengerQueue.length !== level.vehicles.length) {
+    errors.push("passengerQueue must be an array with one passenger color per vehicle.");
   }
 
+  const queueColorCounts = new Map<string, number>();
   for (const colorKey of level.passengerQueue) {
     if (!isNonEmptyString(colorKey)) {
       errors.push("passengerQueue entries must be non-empty strings.");
+      continue;
     }
+
+    queueColorCounts.set(colorKey, (queueColorCounts.get(colorKey) ?? 0) + 1);
   }
 
-  if (level.passengerQueue.length > totalOpenSeats) {
-    errors.push(`passengerQueue length cannot exceed total open seats (${totalOpenSeats}).`);
+  const allColors = new Set([...vehicleColorCounts.keys(), ...queueColorCounts.keys()]);
+  for (const colorKey of allColors) {
+    if ((vehicleColorCounts.get(colorKey) ?? 0) !== (queueColorCounts.get(colorKey) ?? 0)) {
+      errors.push(`passengerQueue count for ${colorKey} must match the number of ${colorKey} vehicles.`);
+    }
   }
 
   const thresholds = level.starThresholds;
@@ -88,25 +104,60 @@ export function validateLevelDefinition(level: LevelDefinition): LevelValidation
     errors.push("hintMetadata.summary must be a non-empty string.");
   }
 
+  if (!Array.isArray(level.hintMetadata.focusVehicleIds) || !level.hintMetadata.focusVehicleIds.length) {
+    errors.push("hintMetadata.focusVehicleIds must contain at least one vehicle id.");
+  }
+
+  for (const vehicleId of level.hintMetadata.focusVehicleIds) {
+    if (!vehicleIds.has(vehicleId)) {
+      errors.push(`hintMetadata.focusVehicleIds references unknown vehicle ${vehicleId}.`);
+    }
+  }
+
   if (level.hintMetadata.recommendedFirstMove) {
-    const { vehicleId, delta } = level.hintMetadata.recommendedFirstMove;
+    const { vehicleId, distance } = level.hintMetadata.recommendedFirstMove;
     if (!vehicleIds.has(vehicleId)) {
       errors.push(`hintMetadata.recommendedFirstMove references unknown vehicle ${vehicleId}.`);
     }
 
-    if (!Number.isInteger(delta) || delta === 0) {
-      errors.push("hintMetadata.recommendedFirstMove.delta must be a non-zero integer.");
+    if (!Number.isInteger(distance) || distance <= 0) {
+      errors.push("hintMetadata.recommendedFirstMove.distance must be a positive integer because cars only move forward.");
     }
+  }
+
+  const targetVehicle = level.vehicles.find((vehicle) => vehicle.id === level.targetVehicleId);
+  if (!targetVehicle) {
+    errors.push(`targetVehicleId ${level.targetVehicleId} does not exist in vehicles.`);
+  } else if (targetVehicle.role !== "target") {
+    errors.push(`Target vehicle ${level.targetVehicleId} must use the target role.`);
+  }
+
+  const targetCount = level.vehicles.filter((vehicle) => vehicle.role === "target").length;
+  if (targetCount !== 1) {
+    errors.push(`Each level must include exactly one target vehicle; found ${targetCount}.`);
   }
 
   if (!errors.length) {
     try {
       const state = createGameState({
         board: { width: level.boardWidth, height: level.boardHeight },
+        exit: level.exit,
+        targetVehicleId: level.targetVehicleId,
         vehicles: level.vehicles.map(toGameVehicleState),
-        passengerQueue: level.passengerQueue,
       });
 
+      createColorMatchState({
+        passengerQueue: level.passengerQueue,
+        dockSlots: level.dockSlots,
+      });
+
+      const recommendedMove = level.hintMetadata.recommendedFirstMove;
+      if (recommendedMove) {
+        const moveValidation = validateMove(state, recommendedMove);
+        if (!moveValidation.ok) {
+          errors.push(`hintMetadata.recommendedFirstMove is invalid: ${moveValidation.message}`);
+        }
+      }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "Unknown level validation error.");
     }

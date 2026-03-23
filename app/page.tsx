@@ -157,7 +157,7 @@ export default function HomePage() {
         <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-black/30 backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Pika CarJam Color</p>
+              <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Pika CarJam MVP</p>
               <h1 className="mt-3 text-3xl font-bold text-white">{displayName}</h1>
               <p className="mt-2 text-sm text-slate-300">
                 {environment === "telegram"
@@ -196,7 +196,7 @@ export default function HomePage() {
               <div>
                 <p className="text-sm font-semibold text-white">Vertical slice ready</p>
                 <p className="mt-1 text-sm text-slate-300">
-                  Pick a puzzle, slide cars along their lanes, open pickup columns for matching colors, and clear the passenger queue.
+                  Pick a puzzle, unblock vehicles, match the passenger queue by color, manage the dock, and restart fast when the lot jams up.
                 </p>
               </div>
               <button
@@ -215,7 +215,7 @@ export default function HomePage() {
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-emerald-400/40 hover:bg-slate-950"
               >
                 <p className="font-semibold text-white">Level map</p>
-                <p className="mt-1 text-slate-400">Browse all 10 handcrafted queue-clearing puzzles.</p>
+                <p className="mt-1 text-slate-400">Browse all 10 tutorial puzzles.</p>
               </button>
               <button
                 type="button"
