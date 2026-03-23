@@ -62,7 +62,7 @@ function registerHandlers(bot: Telegraf<BotContext>) {
     const webAppUrl = encodedChatId ? `${WEBAPP_URL}?startapp=${encodedChatId}` : WEBAPP_URL;
 
     await ctx.reply(
-      'Welcome to another fantastic fruit slicer bot! 🍉🍓🍍.',
+      'Welcome to another fantastic car jam ! 🚗🎶🏁.',
       Markup.inlineKeyboard([
         [Markup.button.url('play now', webAppUrl)]
       ]),
