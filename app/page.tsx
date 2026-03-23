@@ -201,14 +201,6 @@ export default function HomePage() {
     setIsPlaying(true);
   };
 
-  const handleGameOver = (finalScore: number) => {
-    if (webApp) {
-      webApp.HapticFeedback?.notificationOccurred("success");
-    }
-    // Return to the main screen so there is only one main view
-    setIsPlaying(false);
-  };
-
   const handleShareForPlay = async () => {
     const botUsername = process.env.BOT_USERNAME;
     if (!webApp) {
@@ -350,12 +342,7 @@ export default function HomePage() {
   };
 
   if (isPlaying) {
-    return (
-      <CarJam
-        onGameOver={handleGameOver}
-        onBack={() => setIsPlaying(false)}
-      />
-    );
+    return <CarJam onExit={() => setIsPlaying(false)} />;
   }
 
   return (
@@ -439,18 +426,18 @@ export default function HomePage() {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handlePlay}
-              disabled={playsLeft <= 0}
+              <button
+                type="button"
+                onClick={handlePlay}
+                disabled={playsLeft <= 0}
               className={`mt-2 inline-flex w-full items-center justify-center rounded-full px-6 py-3 text-lg font-semibold text-white shadow-lg transition focus:outline-none focus-visible:ring-2 ${
                 playsLeft > 0
                   ? "bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-400 focus-visible:ring-emerald-300"
                   : "bg-gray-600 cursor-not-allowed"
               }`}
             >
-              {playsLeft > 0 ? "Play" : "No plays left"}
-            </button>
+                {playsLeft > 0 ? "Play Level 1" : "No plays left"}
+              </button>
 
             <button
               type="button"

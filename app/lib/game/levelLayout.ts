@@ -1,0 +1,90 @@
+import type { LevelLayout } from "@/app/lib/game/types";
+
+export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
+  id: "playable-level-001",
+  title: "Level 1: Boarding Lane",
+  metadata: {
+    teachingFocus: "Teach clear-path matching before later dock strategy.",
+  },
+  boardSize: {
+    rows: 6,
+    cols: 6,
+  },
+  vehicles: [
+    {
+      id: "vehicle-red-1",
+      color: "red",
+      orientation: "horizontal",
+      length: 2,
+      cells: [
+        { row: 0, col: 1 },
+        { row: 0, col: 2 },
+      ],
+      exitLane: "right",
+      location: "parking",
+      dockSlotIndex: null,
+    },
+    {
+      id: "vehicle-blue-1",
+      color: "blue",
+      orientation: "vertical",
+      length: 3,
+      cells: [
+        { row: 1, col: 0 },
+        { row: 2, col: 0 },
+        { row: 3, col: 0 },
+      ],
+      exitLane: "up",
+      location: "parking",
+      dockSlotIndex: null,
+    },
+    {
+      id: "vehicle-green-1",
+      color: "green",
+      orientation: "horizontal",
+      length: 2,
+      cells: [
+        { row: 2, col: 3 },
+        { row: 2, col: 4 },
+      ],
+      exitLane: "left",
+      location: "parking",
+      dockSlotIndex: null,
+    },
+    {
+      id: "vehicle-yellow-1",
+      color: "yellow",
+      orientation: "vertical",
+      length: 2,
+      cells: [
+        { row: 3, col: 5 },
+        { row: 4, col: 5 },
+      ],
+      exitLane: "down",
+      location: "parking",
+      dockSlotIndex: null,
+    },
+    {
+      id: "vehicle-purple-1",
+      color: "purple",
+      orientation: "horizontal",
+      length: 3,
+      cells: [
+        { row: 4, col: 1 },
+        { row: 4, col: 2 },
+        { row: 4, col: 3 },
+      ],
+      exitLane: "right",
+      location: "parking",
+      dockSlotIndex: null,
+    },
+  ],
+  initialPassengerQueue: [
+    { id: "passenger-1", color: "red", position: 0 },
+    { id: "passenger-2", color: "yellow", position: 1 },
+    { id: "passenger-3", color: "blue", position: 2 },
+    { id: "passenger-4", color: "green", position: 3 },
+    { id: "passenger-5", color: "purple", position: 4 },
+  ],
+  dockCapacity: 3,
+};

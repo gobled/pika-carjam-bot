@@ -25,6 +25,7 @@
 *.pem
 
 # debug
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -41,3 +42,10 @@ next-env.d.ts
 
 # referral data storage
 /data
+
+# editors and temp files
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
