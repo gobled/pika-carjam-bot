@@ -75,6 +75,22 @@
 - What happens when [boundary condition]?
 - How does system handle [error scenario]?
 
+## Constitution Alignment *(mandatory)*
+
+<!--
+  ACTION REQUIRED: Confirm the feature aligns with the project constitution.
+  Replace every prompt below with concrete, repo-specific notes.
+-->
+
+- **Telegram Surface Impact**: [Describe Mini App, bot, launch, sharing, portrait,
+  haptics, or fallback behavior affected by this feature]
+- **Gameplay Value**: [Explain how this work improves the playable puzzle loop or
+  why non-gameplay work is required now]
+- **Storage & Durability**: [State whether data is local-only, development-only,
+  MVP-persistent, or production-ready, and justify any new service]
+- **Verification Plan**: [List the exact lint, build, manual validation, and
+  automated checks that will be used]
+
 ## Requirements *(mandatory)*
 
 <!--

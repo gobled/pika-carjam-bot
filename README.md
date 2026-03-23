@@ -1,6 +1,6 @@
 This is a [Next.js](https://nextjs.org) Telegram Mini App project for **Pika CarJam**, a kid-friendly parking puzzle game inspired by Car Jam / escape-style puzzle games.
 
-The current codebase keeps the existing Next.js + Telegram bot structure while the product direction shifts toward a colorful, touch-first puzzle game for ages 6-12. For the MVP, the app will use the current in-app API routes and Telegram integration instead of a separate backend service.
+The current codebase keeps the existing Next.js app plus Telegram webhook integration while the product direction shifts toward a colorful, touch-first puzzle game for ages 6-12. For the MVP, the app will use the current in-app API routes and Telegram integration instead of a separate backend service.
 
 ## Getting Started
 
@@ -17,6 +17,7 @@ The current codebase keeps the existing Next.js + Telegram bot structure while t
 ```env
 BOT_TOKEN=your_bot_token_here
 WEBAPP_URL=https://your-ngrok-url.ngrok.io
+NEXT_PUBLIC_BOT_USERNAME=your_bot_username_here
 ```
 
 2. Install dependencies:
@@ -57,15 +58,14 @@ ngrok http 3000
 WEBAPP_URL=https://abc123.ngrok.io
 ```
 
-#### Step 3: Start the Telegram Bot
+#### Step 3: Configure the Telegram Webhook
 
-In a new terminal window, start the bot:
+In the current repo, Telegram bot updates are handled by the Next.js route at `app/api/webhook/route.ts`, so there is no separate bot process to start for local development.
+
+Once your app is running through ngrok, point your Telegram bot webhook to:
 
 ```bash
-pnpm bot:dev
-# or use the compiled version
-pnpm bot:build
-pnpm bot:start
+https://your-ngrok-url.ngrok.io/api/webhook
 ```
 
 #### Step 4: Test Your Mini App
@@ -78,10 +78,10 @@ pnpm bot:start
 #### Development Tips
 
 - **Hot Reload**: The Next.js dev server supports hot reload. Changes to your code will automatically reflect in the Mini App.
-- **ngrok URL Changes**: Each time you restart ngrok, you'll get a new URL. Update your `.env.local` file and restart the bot when this happens.
+- **ngrok URL Changes**: Each time you restart ngrok, you'll get a new URL. Update your `.env.local` file and reconfigure the Telegram webhook when this happens.
 - **Debugging**: Use browser DevTools in Telegram Desktop or the Telegram Web version for easier debugging.
 - **Testing on Mobile**: The ngrok URL works on mobile devices too, so you can test on actual Telegram mobile apps.
-- **Bot Menu Button**: The bot automatically sets up a menu button that appears in the chat. This makes it easy to reopen your Mini App.
+- **Webhook Route**: Bot commands are currently handled by `app/api/webhook/route.ts`.
 
 #### Alternative: Using a Fixed Tunnel URL
 
@@ -103,9 +103,12 @@ From a product perspective, this bot is being adapted to launch the Pika CarJam 
 ### Project Structure
 
 - `/app` - Next.js app directory (Mini App frontend)
+- `app/components/CarJam.tsx` - Main gameplay entry component
 - `app/api/webhook/route.ts` - Telegram webhook entry point and bot command handlers
 - `app/api/referrals/claim/route.ts` - Claim referral rewards
 - `app/api/referrals/[userId]/route.ts` - Fetch referral progress for a user
+- `app/lib/telegram.ts` - Telegram Web App access helper
+- `app/lib/referralStorage.ts` - Local referral storage used by the API routes
 
 ### Available Commands
 
@@ -115,10 +118,7 @@ From a product perspective, this bot is being adapted to launch the Pika CarJam 
 - `pnpm start` - Start production server
 - `pnpm lint` - Run ESLint
 
-**Bot:**
-- `pnpm bot:dev` - Start bot in development mode
-- `pnpm bot:build` - Compile TypeScript bot code
-- `pnpm bot:start` - Start compiled bot
+Bot command handling currently runs through the Next.js webhook route in `app/api/webhook/route.ts`.
 
 ### Bot Commands
 

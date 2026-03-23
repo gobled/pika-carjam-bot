@@ -31,7 +31,16 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- Telegram-native experience preserved: document any impact on Mini App launch,
+  bot handoff, portrait flow, haptics, sharing, or out-of-Telegram fallback.
+- Playable-core priority preserved: explain how the feature improves the puzzle
+  loop or why non-gameplay work is necessary now.
+- Local-first architecture preserved: justify any new external backend, database,
+  queue, or hosted dependency and define durability boundaries.
+- Verification defined: list the exact lint, build, manual validation, and
+  automated checks that will prove the change works.
+- Lean architecture preserved: record any new dependency, abstraction, or service
+  in Complexity Tracking with the simpler alternative considered.
 
 ## Project Structure
 
