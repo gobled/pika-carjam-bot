@@ -14,6 +14,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
     {
       id: "vehicle-red-1",
       color: "red",
+      type: "minivan",
+      seats: 6,
       orientation: "horizontal",
       length: 2,
       cells: [
@@ -27,6 +29,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
     {
       id: "vehicle-blue-1",
       color: "blue",
+      type: "bus",
+      seats: 20,
       orientation: "vertical",
       length: 3,
       cells: [
@@ -41,6 +45,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
     {
       id: "vehicle-green-1",
       color: "green",
+      type: "minivan",
+      seats: 6,
       orientation: "horizontal",
       length: 2,
       cells: [
@@ -54,6 +60,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
     {
       id: "vehicle-yellow-1",
       color: "yellow",
+      type: "sedan",
+      seats: 4,
       orientation: "vertical",
       length: 2,
       cells: [
@@ -67,6 +75,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
     {
       id: "vehicle-purple-1",
       color: "purple",
+      type: "bus",
+      seats: 20,
       orientation: "horizontal",
       length: 3,
       cells: [

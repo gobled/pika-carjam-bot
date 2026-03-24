@@ -6,6 +6,8 @@ export type VehicleColor =
   | "purple"
   | "orange";
 
+export type VehicleType = "sedan" | "minivan" | "bus" | "suv" | "truck";
+
 export type VehicleOrientation = "horizontal" | "vertical";
 export type ExitLane = "up" | "right" | "down" | "left";
 export type VehicleLocation = "parking" | "dock" | "resolved";
@@ -36,6 +38,8 @@ export type GridCell = {
 export type Vehicle = {
   id: string;
   color: VehicleColor;
+  type: VehicleType;
+  seats: number;
   orientation: VehicleOrientation;
   length: number;
   cells: GridCell[];
