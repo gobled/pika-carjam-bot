@@ -33,9 +33,7 @@ export function VehicleCard({ vehicle, isClear, isMatch, disabled, onTap }: Vehi
   const statusLabel = disabled
     ? "LOCKED"
     : isClear
-      ? isMatch
-        ? "BOARD"
-        : "DOCK"
+      ? "EXIT"
       : "BLOCKED";
 
   const toneClasses = isClear

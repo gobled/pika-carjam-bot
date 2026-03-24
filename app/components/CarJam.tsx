@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { DockArea } from "@/app/components/game/DockArea";
+import { BoardingSpot } from "@/app/components/game/BoardingSpot";
 import { GameBoard } from "@/app/components/game/GameBoard";
 import { GameOverlay } from "@/app/components/game/GameOverlay";
 import { PassengerQueue } from "@/app/components/game/PassengerQueue";
 import {
   createInitialAttempt,
-  resolveDockVehicleTap,
   resolveParkingVehicleTap,
   restartAttempt,
 } from "@/app/lib/game/gameState";
@@ -26,10 +25,6 @@ export function CarJam({ onExit }: CarJamProps) {
 
   const handleParkingVehicleTap = (vehicleId: string) => {
     setAttempt((currentAttempt) => resolveParkingVehicleTap(currentAttempt, vehicleId));
-  };
-
-  const handleDockVehicleTap = (vehicleId: string) => {
-    setAttempt((currentAttempt) => resolveDockVehicleTap(currentAttempt, vehicleId));
   };
 
   return (
@@ -70,13 +65,7 @@ export function CarJam({ onExit }: CarJamProps) {
 
         <section className="rounded-[20px] border border-white/10 bg-white/5 px-3 py-2">
           <PassengerQueue queue={attempt.passengerQueue} status={attempt.status} />
-          <DockArea
-            dock={attempt.dock}
-            disabled={attempt.status !== "playing"}
-            nextPassengerColor={nextPassenger?.color ?? null}
-            onVehicleTap={handleDockVehicleTap}
-            status={attempt.status}
-          />
+          <BoardingSpot spot={attempt.dock} status={attempt.status} />
         </section>
 
         <GameBoard

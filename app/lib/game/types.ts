@@ -12,23 +12,19 @@ export type VehicleOrientation = "horizontal" | "vertical";
 export type ExitLane = "up" | "right" | "down" | "left";
 export type VehicleLocation = "parking" | "dock" | "resolved";
 export type AttemptStatus = "playing" | "won" | "lost";
-export type LossReason = "dock-full" | "no-legal-move" | null;
+export type LossReason = "no-legal-move" | null;
 export type MoveFeedbackTone = "neutral" | "info" | "success" | "warning" | "danger";
 export type MoveFeedbackCode =
   | "attempt-ready"
   | "attempt-reset"
   | "attempt-locked"
   | "blocked-vehicle"
-  | "parking-resolved"
-  | "vehicle-docked"
-  | "dock-resolved"
-  | "invalid-dock-tap"
+  | "vehicle-sent-to-spot"
   | "vehicle-missing"
-  | "dock-full-loss"
+  | "spot-full-loss"
   | "no-legal-move-loss"
   | "win";
-export type ParkingTapOutcome = "invalid" | "blocked" | "resolved" | "docked" | "dock-full-loss";
-export type DockTapOutcome = "invalid" | "resolved";
+export type ParkingTapOutcome = "invalid" | "blocked" | "can-exit" | "spot-full-loss";
 
 export type GridCell = {
   row: number;
@@ -40,6 +36,7 @@ export type Vehicle = {
   color: VehicleColor;
   type: VehicleType;
   seats: number;
+  boardedPassengers: number;
   orientation: VehicleOrientation;
   length: number;
   cells: GridCell[];

@@ -33,13 +33,10 @@ function getStatusFallback(status: AttemptStatus, lossReason: LossReason): MoveF
 
   if (status === "lost") {
     return {
-      code: lossReason === "dock-full" ? "dock-full-loss" : "no-legal-move-loss",
-      tone: lossReason === "dock-full" ? "danger" : "warning",
-      title: lossReason === "dock-full" ? "Dock is full" : "No legal move left",
-      message:
-        lossReason === "dock-full"
-          ? "A non-matching clear vehicle had nowhere to wait."
-          : "No parking or dock interaction can advance the queue.",
+      code: "no-legal-move-loss",
+      tone: "warning",
+      title: "No moves left",
+      message: "The boarding spot is full and no parked vehicle can exit.",
     };
   }
 
@@ -50,16 +47,10 @@ function getFeedbackEyebrow(content: MoveFeedback) {
   switch (content.code) {
     case "blocked-vehicle":
       return "Blocked move";
-    case "parking-resolved":
-      return "Successful exit";
-    case "vehicle-docked":
-      return "Dock update";
-    case "dock-resolved":
-      return "Dock resolution";
-    case "invalid-dock-tap":
-      return "Dock tap";
-    case "dock-full-loss":
-      return "Dock capacity";
+    case "vehicle-sent-to-spot":
+      return "Boarding spot";
+    case "no-legal-move-loss":
+      return "No moves left";
     case "attempt-ready":
       return "Level ready";
     case "attempt-reset":
@@ -73,18 +64,10 @@ function getFeedbackHint(content: MoveFeedback) {
   switch (content.code) {
     case "blocked-vehicle":
       return "Find an open lane first.";
-    case "parking-resolved":
-      return "Queue advanced.";
-    case "vehicle-docked":
-      return "Stored for later.";
-    case "dock-resolved":
-      return "Tapped from dock.";
-    case "invalid-dock-tap":
-      return "Wait for the matching rider.";
-    case "dock-full-loss":
-      return "Free a dock slot before staging another car.";
+    case "vehicle-sent-to-spot":
+      return "Passengers boarding automatically.";
     case "attempt-ready":
-      return "Match the front rider.";
+      return "Tap a clear vehicle to send it to the spot.";
     default:
       return null;
   }
@@ -149,7 +132,7 @@ export function GameOverlay({ feedback, status, lossReason, onRestart, onExit }:
 
         {lossReason ? (
           <p className="mt-3 text-xs uppercase tracking-[0.2em] opacity-75">
-            {lossReason === "dock-full" ? "Loss reason: dock full" : "Loss reason: no legal move"}
+            Loss reason: no legal move
           </p>
         ) : null}
 

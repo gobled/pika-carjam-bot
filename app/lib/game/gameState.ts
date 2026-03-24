@@ -9,10 +9,9 @@ import type {
   Vehicle,
 } from "@/app/lib/game/types";
 import {
-  getDockTapOutcome,
+  canVehicleExit,
   getFirstOpenDockSlot,
   getNoLegalMoveLossReason,
-  getParkingTapOutcome,
   getVehicleById,
   isAttemptInteractive,
 } from "@/app/lib/game/validation";
@@ -90,20 +89,14 @@ function createLockedFeedback(attempt: LevelAttempt): MoveFeedback {
 }
 
 function createLossFeedback(lossReason: Exclude<LossReason, null>): MoveFeedback {
-  if (lossReason === "dock-full") {
-    return {
-      code: "dock-full-loss",
-      tone: "danger",
-      title: "Dock is full",
-      message: "All three dock slots are occupied, so that clear vehicle had nowhere to wait.",
-    };
-  }
-
   return {
     code: "no-legal-move-loss",
     tone: "warning",
-    title: "No legal move left",
-    message: "No clear parking move or matching dock tap can advance the queue.",
+    title: "No moves left",
+    message:
+      lossReason === "no-legal-move"
+        ? "The boarding spot is full and no parked vehicle can exit."
+        : "No progress can be made.",
   };
 }
 
@@ -116,10 +109,64 @@ function createWinFeedback(): MoveFeedback {
   };
 }
 
+/**
+ * Automatically boards passengers from the front of the queue onto matching
+ * vehicles at the boarding spot. Runs until no more matches are possible.
+ * When a vehicle's seats are all filled it is marked as resolved and leaves.
+ */
+function autoBoardPassengers(attempt: LevelAttempt): LevelAttempt {
+  let current = attempt;
+
+  while (true) {
+    const queue = current.passengerQueue;
+    if (queue.passengers.length === 0) break;
+
+    const frontPassenger = queue.passengers[queue.nextIndex];
+    if (!frontPassenger) break;
+
+    const matchingSlotIndex = current.dock.slots.findIndex(
+      (s) => s !== null && s.color === frontPassenger.color && s.boardedPassengers < s.seats,
+    );
+    if (matchingSlotIndex < 0) break;
+
+    const matchingVehicle = current.dock.slots[matchingSlotIndex]!;
+    const newBoardedCount = matchingVehicle.boardedPassengers + 1;
+    const isFull = newBoardedCount >= matchingVehicle.seats;
+
+    const newVehicles = current.vehicles.map((v) =>
+      v.id === matchingVehicle.id
+        ? {
+            ...cloneVehicle(v),
+            boardedPassengers: newBoardedCount,
+            location: isFull ? ("resolved" as const) : v.location,
+            dockSlotIndex: isFull ? null : v.dockSlotIndex,
+          }
+        : cloneVehicle(v),
+    );
+
+    current = {
+      ...current,
+      vehicles: newVehicles,
+      passengerQueue: advancePassengerQueue(current.passengerQueue),
+      dock: buildDockState(current.dock.capacity, newVehicles),
+    };
+  }
+
+  return current;
+}
+
 function finalizeAttempt(attempt: LevelAttempt, feedback: MoveFeedback | null): LevelAttempt {
-  const nextAttempt: LevelAttempt = {
+  const withDock: LevelAttempt = {
     ...attempt,
     dock: buildDockState(attempt.dock.capacity, attempt.vehicles),
+    selectedFeedback: feedback,
+  };
+
+  const afterBoarding = autoBoardPassengers(withDock);
+
+  const nextAttempt: LevelAttempt = {
+    ...afterBoarding,
+    dock: buildDockState(afterBoarding.dock.capacity, afterBoarding.vehicles),
     selectedFeedback: feedback,
   };
 
@@ -147,33 +194,11 @@ function finalizeAttempt(attempt: LevelAttempt, feedback: MoveFeedback | null): 
     };
   }
 
-  const playingAttempt: LevelAttempt = {
+  return {
     ...nextAttempt,
     status: "playing",
     lossReason: null,
   };
-
-  return autoResolveDockMatch(playingAttempt);
-}
-
-function autoResolveDockMatch(attempt: LevelAttempt): LevelAttempt {
-  if (attempt.status !== "playing") return attempt;
-
-  const nextPassenger = attempt.passengerQueue.passengers[attempt.passengerQueue.nextIndex];
-  if (!nextPassenger) return attempt;
-
-  const matchingVehicle = attempt.dock.slots.find(
-    (slot) => slot !== null && slot.color === nextPassenger.color,
-  ) ?? null;
-
-  if (!matchingVehicle) return attempt;
-
-  return resolveVehicle(attempt, matchingVehicle.id, {
-    code: "dock-resolved",
-    tone: "success",
-    title: "Auto-matched from dock",
-    message: `${formatVehicleColor(matchingVehicle.color)} automatically boarded from the dock.`,
-  });
 }
 
 export function createInitialAttempt(layout: LevelLayout = PLAYABLE_LEVEL_LAYOUT): LevelAttempt {
@@ -197,7 +222,7 @@ export function createInitialAttempt(layout: LevelLayout = PLAYABLE_LEVEL_LAYOUT
       code: "attempt-ready",
       tone: "info",
       title: "Board ready",
-      message: "Tap a clear vehicle to board the next passenger or stage it in the dock.",
+      message: "Tap a clear vehicle to send it to the boarding spot.",
     },
   );
 }
@@ -211,7 +236,7 @@ export function restartAttempt(layout: LevelLayout = PLAYABLE_LEVEL_LAYOUT): Lev
       code: "attempt-reset",
       tone: "info",
       title: "Attempt reset",
-      message: "The opening layout, queue, and empty dock are back in place.",
+      message: "The opening layout, queue, and empty boarding spot are back in place.",
     } satisfies MoveFeedback,
   };
 }
@@ -223,33 +248,10 @@ export function setAttemptFeedback(attempt: LevelAttempt, feedback: MoveFeedback
   };
 }
 
-function resolveVehicle(
+function moveVehicleToSpot(
   attempt: LevelAttempt,
   vehicleId: string,
-  feedback: MoveFeedback,
-): LevelAttempt {
-  return finalizeAttempt(
-    {
-      ...attempt,
-      vehicles: attempt.vehicles.map((vehicle) =>
-        vehicle.id === vehicleId
-          ? {
-              ...cloneVehicle(vehicle),
-              location: "resolved",
-              dockSlotIndex: null,
-            }
-          : cloneVehicle(vehicle),
-      ),
-      passengerQueue: advancePassengerQueue(attempt.passengerQueue),
-    },
-    feedback,
-  );
-}
-
-function moveVehicleToDock(
-  attempt: LevelAttempt,
-  vehicleId: string,
-  dockSlotIndex: number,
+  spotSlotIndex: number,
   color: Vehicle["color"],
 ): LevelAttempt {
   return finalizeAttempt(
@@ -260,16 +262,16 @@ function moveVehicleToDock(
           ? {
               ...cloneVehicle(candidate),
               location: "dock",
-              dockSlotIndex,
+              dockSlotIndex: spotSlotIndex,
             }
           : cloneVehicle(candidate),
       ),
     },
     {
-      code: "vehicle-docked",
+      code: "vehicle-sent-to-spot",
       tone: "info",
-      title: "Vehicle parked in dock",
-      message: `${formatVehicleColor(color)} moved into dock slot ${dockSlotIndex + 1} and will need a later matching tap to board.`,
+      title: "Vehicle at boarding spot",
+      message: `${formatVehicleColor(color)} is now loading passengers at the boarding spot.`,
     },
   );
 }
@@ -290,86 +292,30 @@ export function resolveParkingVehicleTap(attempt: LevelAttempt, vehicleId: strin
     });
   }
 
-  switch (getParkingTapOutcome(attempt, vehicle)) {
-    case "blocked":
-      return setAttemptFeedback(attempt, {
-        code: "blocked-vehicle",
-        tone: "warning",
-        title: "Exit is blocked",
-        message: `${formatVehicleColor(vehicle.color)} cannot leave until its lane is clear.`,
-      });
-    case "resolved":
-      return resolveVehicle(attempt, vehicle.id, {
-        code: "parking-resolved",
-        tone: "success",
-        title: "Passenger boarded",
-        message: `${formatVehicleColor(vehicle.color)} left the lot and advanced the queue.`,
-      });
-    case "docked": {
-      const dockSlotIndex = getFirstOpenDockSlot(attempt.dock);
-
-      if (dockSlotIndex < 0) {
-        return {
-          ...attempt,
-          status: "lost",
-          lossReason: "dock-full",
-          selectedFeedback: createLossFeedback("dock-full"),
-        };
-      }
-
-      return moveVehicleToDock(attempt, vehicle.id, dockSlotIndex, vehicle.color);
-    }
-    case "dock-full-loss":
-      return {
-        ...attempt,
-        status: "lost",
-        lossReason: "dock-full",
-        selectedFeedback: createLossFeedback("dock-full"),
-      };
-    case "invalid":
-    default:
-      return setAttemptFeedback(attempt, {
-        code: "vehicle-missing",
-        tone: "neutral",
-        title: "Move unavailable",
-        message: "Only clear parking vehicles can leave the lot.",
-      });
-  }
-}
-
-export function resolveDockVehicleTap(attempt: LevelAttempt, vehicleId: string): LevelAttempt {
-  if (!isAttemptInteractive(attempt)) {
-    return setAttemptFeedback(attempt, createLockedFeedback(attempt));
-  }
-
-  const vehicle = getVehicleById(attempt, vehicleId);
-
-  if (!vehicle) {
+  if (!canVehicleExit(attempt, vehicle)) {
     return setAttemptFeedback(attempt, {
-      code: "vehicle-missing",
+      code: "blocked-vehicle",
       tone: "warning",
-      title: "Vehicle unavailable",
-      message: "That dock slot is no longer occupied by an active vehicle.",
+      title: "Exit is blocked",
+      message: `${formatVehicleColor(vehicle.color)} cannot leave until its lane is clear.`,
     });
   }
 
-  if (getDockTapOutcome(attempt, vehicle) === "resolved") {
-    return resolveVehicle(attempt, vehicle.id, {
-      code: "dock-resolved",
-      tone: "success",
-      title: "Docked vehicle resolved",
-      message: `${formatVehicleColor(vehicle.color)} matched the queue and boarded from the dock.`,
-    });
+  const spotSlotIndex = getFirstOpenDockSlot(attempt.dock);
+
+  if (spotSlotIndex < 0) {
+    return {
+      ...attempt,
+      status: "lost",
+      lossReason: "no-legal-move",
+      selectedFeedback: createLossFeedback("no-legal-move"),
+    };
   }
 
-  return setAttemptFeedback(attempt, {
-    code: "invalid-dock-tap",
-    tone: "warning",
-    title: "Dock vehicle does not match",
-    message: "Only the docked vehicle that matches the next passenger can be tapped to resolve right now.",
-  });
+  return moveVehicleToSpot(attempt, vehicle.id, spotSlotIndex, vehicle.color);
 }
 
 export function clearAttemptFeedback(attempt: LevelAttempt): LevelAttempt {
   return setAttemptFeedback(attempt, null);
 }
+

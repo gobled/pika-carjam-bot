@@ -4,7 +4,7 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
   id: "playable-level-001",
   title: "Level 1: Boarding Lane",
   metadata: {
-    teachingFocus: "Teach clear-path matching before later dock strategy.",
+    teachingFocus: "Learn to clear paths and fill vehicles at the boarding spot.",
   },
   boardSize: {
     rows: 6,
@@ -15,7 +15,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
       id: "vehicle-red-1",
       color: "red",
       type: "minivan",
-      seats: 6,
+      seats: 2,
+      boardedPassengers: 0,
       orientation: "horizontal",
       length: 2,
       cells: [
@@ -30,7 +31,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
       id: "vehicle-blue-1",
       color: "blue",
       type: "bus",
-      seats: 20,
+      seats: 3,
+      boardedPassengers: 0,
       orientation: "vertical",
       length: 3,
       cells: [
@@ -46,7 +48,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
       id: "vehicle-green-1",
       color: "green",
       type: "minivan",
-      seats: 6,
+      seats: 2,
+      boardedPassengers: 0,
       orientation: "horizontal",
       length: 2,
       cells: [
@@ -61,7 +64,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
       id: "vehicle-yellow-1",
       color: "yellow",
       type: "sedan",
-      seats: 4,
+      seats: 2,
+      boardedPassengers: 0,
       orientation: "vertical",
       length: 2,
       cells: [
@@ -76,7 +80,8 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
       id: "vehicle-purple-1",
       color: "purple",
       type: "bus",
-      seats: 20,
+      seats: 3,
+      boardedPassengers: 0,
       orientation: "horizontal",
       length: 3,
       cells: [
@@ -89,12 +94,21 @@ export const PLAYABLE_LEVEL_LAYOUT: LevelLayout = {
       dockSlotIndex: null,
     },
   ],
+  // Simple queue: passengers grouped by color, each group size = vehicle seats
+  // Total: 2+3+2+2+3 = 12 passengers
   initialPassengerQueue: [
-    { id: "passenger-1", color: "red", position: 0 },
-    { id: "passenger-2", color: "yellow", position: 1 },
-    { id: "passenger-3", color: "blue", position: 2 },
-    { id: "passenger-4", color: "green", position: 3 },
-    { id: "passenger-5", color: "purple", position: 4 },
+    { id: "passenger-r1", color: "red", position: 0 },
+    { id: "passenger-r2", color: "red", position: 1 },
+    { id: "passenger-b1", color: "blue", position: 2 },
+    { id: "passenger-b2", color: "blue", position: 3 },
+    { id: "passenger-b3", color: "blue", position: 4 },
+    { id: "passenger-g1", color: "green", position: 5 },
+    { id: "passenger-g2", color: "green", position: 6 },
+    { id: "passenger-y1", color: "yellow", position: 7 },
+    { id: "passenger-y2", color: "yellow", position: 8 },
+    { id: "passenger-p1", color: "purple", position: 9 },
+    { id: "passenger-p2", color: "purple", position: 10 },
+    { id: "passenger-p3", color: "purple", position: 11 },
   ],
   dockCapacity: 3,
 };

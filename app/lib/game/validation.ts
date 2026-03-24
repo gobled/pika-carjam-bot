@@ -1,7 +1,6 @@
 import { isVehiclePathClear } from "@/app/lib/game/pathfinding";
 import type {
   DockState,
-  DockTapOutcome,
   LevelAttempt,
   LossReason,
   ParkingTapOutcome,
@@ -33,12 +32,6 @@ export function isAttemptComplete(attempt: LevelAttempt) {
   return attempt.status !== "playing";
 }
 
-export function isVehicleMatchingNextPassenger(attempt: LevelAttempt, vehicle: Vehicle) {
-  const nextPassenger = getNextPassenger(attempt);
-
-  return nextPassenger !== null && nextPassenger.color === vehicle.color;
-}
-
 export function canVehicleExit(attempt: LevelAttempt, vehicle: Vehicle) {
   if (vehicle.location !== "parking") {
     return false;
@@ -59,55 +52,31 @@ export function getParkingTapOutcome(
     return "blocked";
   }
 
-  if (isVehicleMatchingNextPassenger(attempt, vehicle)) {
-    return "resolved";
-  }
-
-  return getFirstOpenDockSlot(attempt.dock) >= 0 ? "docked" : "dock-full-loss";
-}
-
-export function getDockTapOutcome(attempt: LevelAttempt, vehicle: Vehicle): DockTapOutcome {
-  if (!isAttemptInteractive(attempt) || vehicle.location !== "dock") {
-    return "invalid";
-  }
-
-  return isVehicleMatchingNextPassenger(attempt, vehicle) ? "resolved" : "invalid";
-}
-
-export function hasAdvancingMove(attempt: LevelAttempt) {
-  if (!isAttemptInteractive(attempt) || getNextPassenger(attempt) === null) {
-    return false;
-  }
-
-  return attempt.vehicles.some((vehicle) => {
-    if (vehicle.location === "dock") {
-      return getDockTapOutcome(attempt, vehicle) === "resolved";
-    }
-
-    if (vehicle.location === "parking") {
-      const outcome = getParkingTapOutcome(attempt, vehicle);
-      return outcome === "resolved" || outcome === "docked";
-    }
-
-    return false;
-  });
+  return isDockFull(attempt.dock) ? "spot-full-loss" : "can-exit";
 }
 
 export function getNoLegalMoveLossReason(attempt: LevelAttempt): LossReason {
-  if (!isAttemptInteractive(attempt) || getNextPassenger(attempt) === null) {
-    return null;
-  }
+  if (!isAttemptInteractive(attempt)) return null;
 
-  const nextPassenger = getNextPassenger(attempt)!;
+  const queue = attempt.passengerQueue;
+  if (queue.passengers.length === 0) return null;
 
-  if (isDockFull(attempt.dock)) {
-    const hasMatchingVehicle = attempt.vehicles.some(
-      (v) =>
-        (v.location === "parking" || v.location === "dock") &&
-        v.color === nextPassenger.color,
-    );
-    if (!hasMatchingVehicle) return "no-legal-move";
-  }
+  const frontPassenger = queue.passengers[queue.nextIndex];
+  if (!frontPassenger) return null;
 
-  return hasAdvancingMove(attempt) ? null : "no-legal-move";
+  // Auto-boarding can still run if a spot vehicle matches the front of queue
+  const spotCanBoard = attempt.dock.slots.some(
+    (s) => s !== null && s.color === frontPassenger.color && s.boardedPassengers < s.seats,
+  );
+  if (spotCanBoard) return null;
+
+  // Player can make progress if the spot has room AND a parked vehicle can exit
+  const spotHasRoom = !isDockFull(attempt.dock);
+  const anyParkingCanExit = attempt.vehicles.some(
+    (v) => v.location === "parking" && canVehicleExit(attempt, v),
+  );
+
+  if (spotHasRoom && anyParkingCanExit) return null;
+
+  return "no-legal-move";
 }
