@@ -147,11 +147,33 @@ function finalizeAttempt(attempt: LevelAttempt, feedback: MoveFeedback | null): 
     };
   }
 
-  return {
+  const playingAttempt: LevelAttempt = {
     ...nextAttempt,
     status: "playing",
     lossReason: null,
   };
+
+  return autoResolveDockMatch(playingAttempt);
+}
+
+function autoResolveDockMatch(attempt: LevelAttempt): LevelAttempt {
+  if (attempt.status !== "playing") return attempt;
+
+  const nextPassenger = attempt.passengerQueue.passengers[attempt.passengerQueue.nextIndex];
+  if (!nextPassenger) return attempt;
+
+  const matchingVehicle = attempt.dock.slots.find(
+    (slot) => slot !== null && slot.color === nextPassenger.color,
+  ) ?? null;
+
+  if (!matchingVehicle) return attempt;
+
+  return resolveVehicle(attempt, matchingVehicle.id, {
+    code: "dock-resolved",
+    tone: "success",
+    title: "Auto-matched from dock",
+    message: `${formatVehicleColor(matchingVehicle.color)} automatically boarded from the dock.`,
+  });
 }
 
 export function createInitialAttempt(layout: LevelLayout = PLAYABLE_LEVEL_LAYOUT): LevelAttempt {
@@ -344,7 +366,7 @@ export function resolveDockVehicleTap(attempt: LevelAttempt, vehicleId: string):
     code: "invalid-dock-tap",
     tone: "warning",
     title: "Dock vehicle does not match",
-    message: "Only the docked vehicle that matches the next passenger can resolve right now, and docked vehicles never auto-resolve.",
+    message: "Only the docked vehicle that matches the next passenger can be tapped to resolve right now.",
   });
 }
 

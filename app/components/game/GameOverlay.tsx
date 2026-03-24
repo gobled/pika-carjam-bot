@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { AttemptStatus, LossReason, MoveFeedback } from "@/app/lib/game/types";
 
 type GameOverlayProps = {
@@ -9,6 +10,8 @@ type GameOverlayProps = {
   onRestart: () => void;
   onExit: () => void;
 };
+
+const TOAST_DURATION_MS = 2600;
 
 const TONE_STYLES = {
   neutral: "border-white/10 bg-black/20 text-slate-200",
@@ -69,27 +72,53 @@ function getFeedbackEyebrow(content: MoveFeedback) {
 function getFeedbackHint(content: MoveFeedback) {
   switch (content.code) {
     case "blocked-vehicle":
-      return "Find a vehicle with an open lane before trying to advance the queue.";
+      return "Find an open lane first.";
     case "parking-resolved":
-      return "The next passenger is now at the front of the queue.";
+      return "Queue advanced.";
     case "vehicle-docked":
-      return "That move was legal, but the vehicle now waits for a later matching tap.";
+      return "Stored for later.";
     case "dock-resolved":
-      return "Docked vehicles still require a tap once they become the active match.";
+      return "Tapped from dock.";
     case "invalid-dock-tap":
-      return "A docked vehicle can only board when its color matches the passenger at the front of the queue.";
+      return "Wait for the matching rider.";
     case "dock-full-loss":
-      return "A clear non-matching vehicle needs an open dock slot. If all three slots are occupied, the run ends immediately.";
+      return "Free a dock slot before staging another car.";
     case "attempt-ready":
-      return "Start by matching the highlighted passenger with a clear vehicle.";
+      return "Match the front rider.";
     default:
       return null;
   }
 }
 
 export function GameOverlay({ feedback, status, lossReason, onRestart, onExit }: GameOverlayProps) {
+  const [visibleFeedback, setVisibleFeedback] = useState<MoveFeedback | null>(feedback);
   const outcomeContent = status === "playing" ? null : getStatusFallback(status, lossReason);
-  const content = outcomeContent ?? feedback;
+
+  useEffect(() => {
+    if (status !== "playing") {
+      setVisibleFeedback(null);
+      return;
+    }
+
+    if (!feedback) {
+      setVisibleFeedback(null);
+      return;
+    }
+
+    setVisibleFeedback(feedback);
+
+    const timeoutId = window.setTimeout(() => {
+      setVisibleFeedback((currentFeedback) =>
+        currentFeedback === feedback ? null : currentFeedback,
+      );
+    }, TOAST_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [feedback, status]);
+
+  const content = outcomeContent ?? visibleFeedback;
 
   if (!content) {
     return null;
@@ -99,11 +128,13 @@ export function GameOverlay({ feedback, status, lossReason, onRestart, onExit }:
 
   if (outcomeContent) {
     return (
-      <section
-        className={`rounded-[28px] border p-4 shadow-xl sm:p-5 ${TONE_STYLES[outcomeContent.tone]}`}
-        role="alert"
-        aria-live="assertive"
-      >
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
+        <section
+          className={`relative w-full max-w-sm rounded-[24px] border p-4 shadow-xl ${TONE_STYLES[outcomeContent.tone]}`}
+          role="alert"
+          aria-live="assertive"
+        >
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs uppercase tracking-[0.24em] opacity-80">
             {status === "won" ? "Win state" : "Loss state"}
@@ -122,7 +153,7 @@ export function GameOverlay({ feedback, status, lossReason, onRestart, onExit }:
           </p>
         ) : null}
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
             onClick={onRestart}
@@ -140,25 +171,24 @@ export function GameOverlay({ feedback, status, lossReason, onRestart, onExit }:
         </div>
 
         {hint ? <p className="mt-4 text-xs opacity-80">{hint}</p> : null}
-      </section>
+        </section>
+      </div>
     );
   }
 
   return (
     <section
-      className={`rounded-[28px] border p-4 ${TONE_STYLES[content.tone]}`}
+      className={`pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+3.5rem)] z-30 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-[18px] border px-3 py-2 shadow-lg ${TONE_STYLES[content.tone]}`}
       role="status"
       aria-live="polite"
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs uppercase tracking-[0.24em] opacity-80">{getFeedbackEyebrow(content)}</p>
-        <span className="rounded-full border border-current/15 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] opacity-80">
-          {content.tone}
-        </span>
+        <p className="text-[11px] uppercase tracking-[0.24em] opacity-80">
+          {getFeedbackEyebrow(content)}
+        </p>
+        {hint ? <p className="truncate text-[10px] opacity-80">{hint}</p> : null}
       </div>
-      <h2 className="mt-2 text-lg font-semibold">{content.title}</h2>
-      <p className="mt-1 text-sm opacity-90">{content.message}</p>
-      {hint ? <p className="mt-3 text-xs opacity-80">{hint}</p> : null}
+      <p className="mt-1 text-sm font-semibold">{content.title}</p>
     </section>
   );
 }

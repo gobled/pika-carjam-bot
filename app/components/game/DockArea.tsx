@@ -31,23 +31,20 @@ export function DockArea({
     status === "won" ? "Complete" : status === "lost" ? "Locked" : "Active";
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-white/5 p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Dock</p>
-          <h2 className="text-lg font-semibold text-white">Holding area</h2>
-        </div>
+    <div className="mt-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-slate-300">
+          <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Dock</p>
+          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300">
             {occupiedCount}/{dock.capacity}
           </span>
-          <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-slate-300">
-            {statusLabel}
-          </span>
         </div>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300">
+          {statusLabel}
+        </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         {dock.slots.map((vehicle, index) => {
           const isMatch = Boolean(
             vehicle && status === "playing" && nextPassengerColor === vehicle.color,
@@ -64,7 +61,7 @@ export function DockArea({
               type="button"
               onClick={() => vehicle && onVehicleTap?.(vehicle.id)}
               disabled={!vehicle || disabled || !onVehicleTap}
-              className={`flex min-h-24 flex-col items-start justify-between rounded-2xl border px-3 py-3 text-left text-sm sm:min-h-28 ${
+              className={`flex min-h-14 flex-col items-start justify-between rounded-xl border px-2 py-2 text-left text-sm ${
                 vehicle
                   ? `${COLOR_STYLES[vehicle.color]} border-solid font-semibold ${
                       isMatch ? "ring-2 ring-emerald-300/70 shadow-lg shadow-emerald-500/20" : ""
@@ -76,43 +73,30 @@ export function DockArea({
                   : "border-dashed border-white/10 bg-black/20 text-slate-500"
               }`}
             >
-              <div className="flex w-full items-start justify-between gap-2 text-[11px] uppercase tracking-[0.2em] opacity-80">
-                <span>Slot {index + 1}</span>
-                {vehicle ? (
-                  <span
-                    className={`rounded-full border px-2 py-1 ${
-                      isMatch
-                        ? "border-emerald-200/30 bg-emerald-950/70 text-emerald-100"
-                        : "border-current/15 bg-black/15"
+                <div className="flex w-full items-start justify-between gap-1 text-[9px] uppercase tracking-[0.2em] opacity-80">
+                  <span>{index + 1}</span>
+                  {vehicle ? (
+                    <span
+                      className={`rounded-full border px-1.5 py-0.5 text-[8px] ${
+                        isMatch
+                          ? "border-emerald-200/30 bg-emerald-950/70 text-emerald-100"
+                          : "border-current/15 bg-black/15"
                     }`}
                   >
                     {statusText}
                   </span>
                 ) : null}
-              </div>
+                </div>
 
-              <div>
-                <p className="text-base font-semibold capitalize">
-                  {vehicle ? `${vehicle.color} vehicle` : "Available"}
-                </p>
-                <p className="mt-1 text-xs opacity-80">
-                  {vehicle
-                    ? isMatch
-                      ? "This docked vehicle now matches the queue and can board on tap."
-                      : "Stored until its color reaches the front of the queue."
-                    : "The next clear non-matching vehicle will park here."}
-                </p>
-              </div>
+                <div>
+                  <p className="text-xs font-semibold capitalize">
+                    {vehicle ? vehicle.color : "Open"}
+                  </p>
+                </div>
             </button>
           );
         })}
       </div>
-
-      <p className="mt-3 text-xs text-slate-400">
-        {status === "playing"
-          ? "Docked vehicles never auto-resolve. When a stored color reaches the front, it still needs an explicit tap to board."
-          : "Dock interactions are locked until you restart or exit the completed run."}
-      </p>
-    </section>
+    </div>
   );
 }

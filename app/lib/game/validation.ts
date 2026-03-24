@@ -98,5 +98,16 @@ export function getNoLegalMoveLossReason(attempt: LevelAttempt): LossReason {
     return null;
   }
 
+  const nextPassenger = getNextPassenger(attempt)!;
+
+  if (isDockFull(attempt.dock)) {
+    const hasMatchingVehicle = attempt.vehicles.some(
+      (v) =>
+        (v.location === "parking" || v.location === "dock") &&
+        v.color === nextPassenger.color,
+    );
+    if (!hasMatchingVehicle) return "no-legal-move";
+  }
+
   return hasAdvancingMove(attempt) ? null : "no-legal-move";
 }
